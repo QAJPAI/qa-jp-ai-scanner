@@ -76,6 +76,21 @@ Only check sites you own or have permission to check.
 - No web UI, rate limiting or audit log yet. These are required before any public deployment.
 - A grade of A means nothing was found in the checks that ran. It does not mean the site is safe.
 
+## Acknowledgements
+
+This project builds on the published work of others and says so.
+
+- **[cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill)**
+  (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.) — the reference for the planned
+  repository layer: three distinct verdicts, verification by an agent that did not
+  make the finding, a coverage ledger, and machine-validated records. The URL layer
+  in this repository contains no code from it yet. When its files are incorporated,
+  they will be kept in a separate directory together with its original license.
+- **CodeRabbit** — its public descriptions of a sandboxed, evidence-filtered review
+  pipeline informed the design.
+
+Improvements made here that are useful upstream will be offered back.
+
 ## License
 
 Copyright (C) 2026 iQi
