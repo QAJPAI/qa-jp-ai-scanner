@@ -18,8 +18,8 @@ for everyone.
   │    passive for anyone,    │   │  passive / active        │   │ records: three verdicts      │
   │    active for the owner   │   └──────────────────────────┘   │ stable fingerprints          │
   ├───────────────────────────┤   ┌──────────────────────────┐   │ coverage ledger              │
-  │ B. Source code, before    │──▶│ repo checkers (planned)  │──▶│ validator                    │
-  │    deployment (planned)   │   │  local checks, audit     │   │ summary and grade            │
+  │ B. Source code, before    │──▶│ repo checkers (src/repo) │──▶│ validator                    │
+  │    deployment             │   │  local checks; later:    │   │ summary and grade            │
   └───────────────────────────┘   │  skills, other vendors   │   └──────────────┬───────────────┘
                                   └──────────────────────────┘                  │ Assessment (JSON)
                                                                                 ▼
@@ -28,7 +28,7 @@ for everyone.
 
 ## Two entrances, one result format
 
-| | A. URL | B. Source code (planned) |
+| | A. URL | B. Source code |
 |---|---|---|
 | When | After deployment | Before deployment: the QA stage |
 | Sees | What the site actually exposes | Why it is exposed, and what is not visible from outside |
@@ -39,6 +39,22 @@ A defender only wins by finding a problem before an attacker does. Entrance B is
 where that happens most cheaply, so the core is built for both from the start:
 both entrances emit the same `Assessment`, and one assessment can later combine
 evidence from both.
+
+### Entrance B in practice
+
+- `src/repo/load.ts` reads the folder into memory once: symbolic links are
+  never followed, files are opened with `O_NOFOLLOW`, and size, count, total
+  and depth are capped. Everything skipped is counted in `RepoLoadStats`, and a
+  checker reading files must report `some_files_not_read` when anything was.
+- Checkers see only that in-memory `RepoContext`. None touches the file system,
+  runs code or uses the network.
+- Text from the project is treated like text from a hostile site: SQL and
+  Firebase rules are blanked (comments, strings, function bodies) in one linear
+  pass before any pattern runs, and every pattern is bounded.
+- Tests, fixtures and documents are not evidence that a service is used, and a
+  key-shaped value in a test becomes `needs_validation`, not a leak.
+- Key detection is shared with entrance A (`src/detect/secrets.ts`), so a key
+  has the same fingerprint wherever it is found.
 
 ## Core objects
 
@@ -121,7 +137,9 @@ know who will read the result.
 
 ```
 src/core/        judging layer (no network, no I/O)
+src/detect/      detection shared by both entrances (privileged keys, placeholders)
 src/url/         entrance A: fetch guard, context loading, checkers
+src/repo/        entrance B: safe folder loading, .gitignore matching, checkers
 src/ownership/   proof of ownership: mailbox, verification file, DNS
 src/i18n/ja.ts   every string a person reads
 src/report.ts    public summary and owner report, derived from an Assessment
@@ -130,8 +148,9 @@ src/cli.ts       command line
 
 ## Not built yet
 
-- Entrance B (source code), including adapters for external audit methods and
-  cross-vendor verification.
+- Entrance B beyond R01 and R02, including adapters for external audit methods
+  and cross-vendor verification.
+- Calling entrance B from inside an AI coding tool.
 - Combining several runs into one assessment.
 - Certificates, the public registry and revocation.
 - The web service: UI, login-link mail, rate limiting, audit log.

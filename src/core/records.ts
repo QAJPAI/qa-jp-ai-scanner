@@ -16,12 +16,14 @@ import type { CheckMode, Layer, RuleId, Severity } from './types';
  */
 
 /** Why a layer could not decide. */
-export type Blocker = 'not_observable_from_outside' | 'requires_source' | 'requires_deployment_fact';
-export const BLOCKERS: readonly Blocker[] = [
+export const BLOCKERS = [
   'not_observable_from_outside',
   'requires_source',
   'requires_deployment_fact',
-];
+  /** The setting is visible, but only the owner can say whether it is intended (e.g. public read). */
+  'requires_owner_intent',
+] as const;
+export type Blocker = (typeof BLOCKERS)[number];
 
 interface RecordBase {
   /** Stable across runs for the same issue; see fingerprintOf(). */

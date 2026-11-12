@@ -9,12 +9,14 @@ import { dnsRecordName, verifyByDns } from './ownership/dns';
 import { verifyByFile } from './ownership/file';
 import { ownershipSubject, type OwnershipProof } from './ownership/proof';
 import { mintVerificationToken } from './ownership/token';
-import { renderOwnerReport, renderPublicSummary } from './report';
+import { scanRepo } from './repo/scan';
+import { renderLocalReport, renderOwnerReport, renderPublicSummary } from './report';
 import { closeAgents } from './url/net/fetcher';
 import { BlockedAddressError } from './url/net/guard';
 import { normalizeTarget, ScanError, scanOwner, scanPublic } from './url/scan';
 
 const USAGE = `Usage:
+  qa-scan check [folder]                         Pre-deployment check of your own source code (default: current folder)
   qa-scan <url>                                  Public summary (passive checks only)
   qa-scan token <url> --account <id>             Show the ownership token and how to place it
   qa-scan <url> --account <id> --verify file|dns Verify ownership, then show the detailed report
@@ -79,6 +81,13 @@ async function main(): Promise<number> {
       return 2;
     }
     return validateFile(positionals[1]);
+  }
+
+  if (positionals[0] === 'check') {
+    // Reads files only: no code is run and nothing is sent anywhere.
+    const assessment = await scanRepo(positionals[1] ?? '.');
+    console.log(values.json ? JSON.stringify(assessment, null, 2) : renderLocalReport(assessment));
+    return 0;
   }
 
   if (positionals[0] === 'token') {

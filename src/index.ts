@@ -16,6 +16,10 @@ export type { Checker, CheckOutcome } from './core/checker';
 export { scanPublic, scanOwner, normalizeTarget, ScanError, URL_CHECKERS, type ScanOptions } from './url/scan';
 export type { UrlContext } from './url/context';
 
+// Entrance B: source code, before deployment.
+export { scanRepo, REPO_CHECKERS, type RepoScanOptions } from './repo/scan';
+export type { RepoContext } from './repo/context';
+
 // Ownership verification.
 export { evaluateEmailOwnership, issueEmailProofAfterLinkClick, type EmailDecision } from './ownership/email';
 export { verifyByFile, WELL_KNOWN_PATH } from './ownership/file';
@@ -24,4 +28,4 @@ export { mintVerificationToken } from './ownership/token';
 export { ownershipSubject, type OwnershipProof } from './ownership/proof';
 
 // Reports (Japanese).
-export { toPublicSummary, renderPublicSummary, renderOwnerReport, type PublicSummary } from './report';
+export { toPublicSummary, renderPublicSummary, renderOwnerReport, renderLocalReport, type PublicSummary } from './report';

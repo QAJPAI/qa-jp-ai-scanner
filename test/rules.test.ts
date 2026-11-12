@@ -5,20 +5,20 @@ import { test } from 'node:test';
 import { dedupeByFingerprint, recordFactory } from '../src/core/records';
 import { newSecretScanState, scanTextForSecrets } from '../src/url/checkers/secrets';
 import { checkTransport } from '../src/url/checkers/transport';
-import { fake } from './fixture';
+import { fake, PEM_BEGIN, varied } from './fixture';
 
 const make = recordFactory('test', 'url', 'passive');
 const codes = (text: string) => scanTextForSecrets('https://example.jp/app.js', text, make).map((f) => f.code);
 
 test('R02 detects privileged keys', () => {
   assert.deepEqual(codes(`const k="${fake.supabaseJwt('service_role')}"`), ['secret.supabase_service_role']);
-  assert.deepEqual(codes(`key:'sb_secret_${'a'.repeat(30)}'`), ['secret.supabase_secret_key']);
+  assert.deepEqual(codes(`key:'${fake.supabaseSecret()}'`), ['secret.supabase_secret_key']);
   assert.deepEqual(codes(`apiKey:"${fake.openai()}"`), ['secret.openai']);
   assert.deepEqual(codes(`apiKey:"${fake.anthropic()}"`), ['secret.anthropic']);
   assert.deepEqual(codes(`stripe("${fake.stripeLive()}")`), ['secret.stripe_live']);
-  assert.deepEqual(codes('-----BEGIN PRIVATE KEY-----\\nMIIE'), ['secret.private_key']);
-  assert.deepEqual(codes(`t="ghp_${'a'.repeat(36)}"`), ['secret.github_token']);
-  assert.deepEqual(codes(`AKIA${'A'.repeat(16)}`), ['secret.aws_access_key']);
+  assert.deepEqual(codes(`${PEM_BEGIN}\\nMIIE`), ['secret.private_key']);
+  assert.deepEqual(codes(`t="${fake.githubToken()}"`), ['secret.github_token']);
+  assert.deepEqual(codes(fake.awsKeyId()), ['secret.aws_access_key']);
 });
 
 test('R02 ignores keys that are public by design and look-alikes', () => {
@@ -31,6 +31,19 @@ test('R02 ignores keys that are public by design and look-alikes', () => {
   assert.deepEqual(codes('const ask_live_updates_enabled_flag = true'), []);
   // a JWT-shaped string whose payload is not JSON
   assert.deepEqual(codes(`eyJ${'a'.repeat(20)}.eyJ${'b'.repeat(20)}.${'c'.repeat(20)}`), []);
+});
+
+test('R02 ignores documentation placeholders', () => {
+  for (const placeholder of [
+    `sk_${'live'}_xxxxxxxxxxxxxxxxxxxxxxxx`,
+    `sk-${'proj'}-your-api-key-goes-here-0123456789`,
+    `sk-${'proj'}-${'0'.repeat(40)}`,
+    `sb_${'secret'}_EXAMPLE${varied(20)}`,
+    `AK${'IA'}AAAAAAAAAAAAAAAA`,
+    `gh${'p'}_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`,
+  ]) {
+    assert.deepEqual(codes(`key = "${placeholder}"`), [], placeholder);
+  }
 });
 
 test('R02: the same key in several places is one issue; nothing reveals the key', () => {

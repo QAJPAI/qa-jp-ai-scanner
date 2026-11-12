@@ -11,7 +11,15 @@ import { RULE_IDS, type CheckMode, type Layer, type RuleId, type Tier } from './
 
 export type CoverageStatus = 'checked' | 'partial' | 'not_run' | 'error';
 
-export const NOT_RUN_REASONS = ['requires_owner_verification', 'requires_source', 'not_implemented'] as const;
+export const NOT_RUN_REASONS = [
+  'requires_owner_verification',
+  'requires_source',
+  /** A repo-layer assessment: this rule is answered by checking the deployed site. */
+  'requires_deployed_site',
+  /** The checker ran and found nothing the rule applies to (e.g. no Supabase or Firebase in the project). */
+  'not_applicable',
+  'not_implemented',
+] as const;
 export type NotRunReason = (typeof NOT_RUN_REASONS)[number];
 
 /** Known limits of a check that did run. */
@@ -21,6 +29,10 @@ export const COVERAGE_NOTES = [
   'some_content_not_read',
   'record_limit_reached',
   'some_probes_failed',
+  /** Repo layer: settings written in code were examined; settings changed in a dashboard were not. */
+  'code_only',
+  /** Repo layer: some files were too large, too many, unreadable or symbolic links. */
+  'some_files_not_read',
 ] as const;
 export type CoverageNote = (typeof COVERAGE_NOTES)[number];
 
@@ -95,8 +107,9 @@ export function buildLedger(layer: Layer, ran: CheckerCoverage[], deferred: Defe
     const winner = active && (!passive || STATUS_RANK[active.status] > STATUS_RANK[passive.status]) ? active : passive;
 
     if (!winner) {
+      const otherLayer: NotRunReason = layer === 'url' ? 'requires_source' : 'requires_deployed_site';
       const reason: NotRunReason =
-        deferredReason.get(ruleId) ?? (RULES[ruleId].layers.includes(layer) ? 'not_implemented' : 'requires_source');
+        deferredReason.get(ruleId) ?? (RULES[ruleId].layers.includes(layer) ? 'not_implemented' : otherLayer);
       return { ruleId, layer, status: 'not_run', reason };
     }
     const unit: CoverageUnit = {

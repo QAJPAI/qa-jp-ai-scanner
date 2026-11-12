@@ -55,6 +55,26 @@ export async function startFixture(routes: Record<string, Route>, fallback?: Rou
 
 const b64 = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
 
+const VARIED = 'Ab3Cd5Ef7Gh9Jk2Mn4Pq6Rs8Tu1Vw0XyZ';
+
+/**
+ * A string with the character variety of a real random key, so it is not
+ * mistaken for a documentation placeholder. `seed` gives distinct values.
+ */
+export function varied(length: number, seed = 0, alphabet = VARIED): string {
+  // A small deterministic generator: the same seed always gives the same string.
+  let x = (Math.imul(seed + 1, 2654435761) + 1013904223) >>> 0;
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    x = (Math.imul(x, 1664525) + 1013904223) >>> 0;
+    out += alphabet[(x >>> 16) % alphabet.length];
+  }
+  return out;
+}
+
+/** A private-key header, assembled so the literal never sits in the repo. */
+export const PEM_BEGIN = ['-----BEGIN', 'PRIVATE', 'KEY-----'].join(' ');
+
 /** Fake keys are assembled at runtime so no secret-shaped literal sits in the repo. */
 export const fake = {
   supabaseJwt: (role: string) =>
@@ -65,8 +85,11 @@ export const fake = {
     ].join('.'),
   stripeLive: () => ['sk', 'live', 'A1b2C3d4E5f6G7h8I9j0K1l2'].join('_'),
   stripePublishable: () => ['pk', 'live', 'A1b2C3d4E5f6G7h8I9j0K1l2'].join('_'),
-  openai: () => `sk-${'proj'}-${'x'.repeat(40)}`,
-  anthropic: () => `sk-${'ant'}-${'y'.repeat(40)}`,
+  openai: () => `sk-${'proj'}-${varied(40, 1)}`,
+  anthropic: () => `sk-${'ant'}-${varied(40, 2)}`,
+  supabaseSecret: () => `sb_${'secret'}_${varied(30, 3)}`,
+  githubToken: () => `gh${'p'}_${varied(36, 4)}`,
+  awsKeyId: (seed = 5) => `AK${'IA'}${varied(16, seed, 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789')}`,
 };
 
 export const html = (scripts: string[], inline = '') =>

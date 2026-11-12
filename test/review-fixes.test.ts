@@ -14,7 +14,7 @@ import { checkTransport } from '../src/url/checkers/transport';
 import { closeAgents, safeFetch } from '../src/url/net/fetcher';
 import { isBlockedAddress, makeGuardedLookup } from '../src/url/net/guard';
 import { discoverScripts, scan, ScanError } from '../src/url/scan';
-import { fake, html, startFixture } from './fixture';
+import { fake, html, PEM_BEGIN, startFixture } from './fixture';
 
 /**
  * Regression tests for defects found by an independent review (2026-11-12).
@@ -218,7 +218,7 @@ test('scripts beyond the cap, and truncated scripts, are reported', async () => 
 });
 
 test('a page full of key-shaped decoys cannot crash the check or hide a real key', async () => {
-  const decoys = Array.from({ length: 5000 }, (_, i) => `"AKIA${String(i).padStart(16, 'A')}"`).join(',');
+  const decoys = Array.from({ length: 5000 }, (_, i) => `"${fake.awsKeyId(i)}"`).join(',');
   const site = await startFixture({
     '/': page(['/app.js']),
     '/app.js': { body: `Stripe("${fake.stripeLive()}");const d=[${decoys}]` },
@@ -312,8 +312,8 @@ test('R11: "could not ask" is not "not there"', async () => {
 // ---------------------------------------------------------------- fingerprints
 
 test('a private key keeps its fingerprint when the bundle is renamed or shifted', () => {
-  const pem = '-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\\n-----END PRIVATE KEY-----';
-  const other = '-----BEGIN PRIVATE KEY-----\\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDZ\\n-----END PRIVATE KEY-----';
+  const pem = PEM_BEGIN + '\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7\\n-----END PRIVATE KEY-----';
+  const other = PEM_BEGIN + '\\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDZ\\n-----END PRIVATE KEY-----';
   const a = scanTextForSecrets('https://example.jp/assets/index-abc123.js', `const k="${pem}"`, make);
   const b = scanTextForSecrets('https://example.jp/assets/index-def456.js', `/* one more line */\nconst k="${pem}"`, make);
   const c = scanTextForSecrets('https://example.jp/assets/index-abc123.js', `const k="${other}"`, make);

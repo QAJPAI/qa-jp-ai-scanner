@@ -24,6 +24,11 @@ export interface Checker<Ctx> {
 
 export interface CheckOutcome {
   records: AssessmentRecord[];
-  /** One entry per rule in `rules`, stating how far the check actually got. */
+  /**
+   * One entry per rule in `rules`, stating how far the check actually got —
+   * except rules listed in `notApplicable`, which get no entry.
+   */
   coverage: CoverageReport[];
+  /** Rules the checker found nothing to apply to. Recorded as not_run with that reason, never as passed. */
+  notApplicable?: RuleId[];
 }

@@ -9,7 +9,7 @@ import {
   blockerLabel,
   coverageNoteLabel,
   coverageStatusLabel,
-  findingText,
+  findingTextFor,
   gradeLabel,
   needsValidationText,
   publicGradeLabel,
@@ -111,7 +111,7 @@ function ownerHeader(s: OwnerSummary): string[] {
 }
 
 function renderConfirmed(r: ConfirmedRecord, index: number): string[] {
-  const text = findingText[r.code];
+  const text = findingTextFor(r.layer, r.code);
   return [
     `${index}. [${r.severity}・${severityLabel[r.severity]}] ${text?.title ?? r.code}（${r.ruleId}）`,
     `   ${t.location}: ${r.location}`,
@@ -149,9 +149,44 @@ function renderCoverage(unit: CoverageUnit): string {
  * ownership proof again, and it must cover the assessed host and still be valid.
  */
 export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof, now: number = Date.now()): string {
-  if (assessment.tier !== 'owner' || !proof || !proofCovers(proof, targetName(assessment), now)) {
+  if (
+    assessment.target.layer !== 'url' ||
+    assessment.tier !== 'owner' ||
+    !proof ||
+    !proofCovers(proof, targetName(assessment), now)
+  ) {
     throw new Error('Detailed report requires a valid ownership proof for this target');
   }
+  return renderDetails(assessment, ownerHeader, t.checksOwner, t.needsValidationHeading);
+}
+
+/**
+ * Report of a pre-deployment check on source code. Whoever ran it holds the
+ * code, so no further proof is asked for. Only repo-layer assessments render here.
+ */
+export function renderLocalReport(assessment: Assessment): string {
+  if (assessment.target.layer !== 'repo') throw new Error('Local report is for source-code checks only');
+  return renderDetails(assessment, localHeader, t.checksLocal, t.needsValidationHeadingLocal);
+}
+
+function localHeader(s: OwnerSummary): string[] {
+  return [
+    t.localTitle,
+    `${t.folder}: ${s.host}`,
+    `${t.scannedAt}: ${JST.format(new Date(s.scannedAt))}（日本時間）`,
+    `${t.grade}: ${s.grade}（${gradeLabel[s.grade]}）`,
+    `${t.counts}: ${countsText(s, SEVERITIES)}`,
+    `${t.needsValidationCount}: ${s.needsValidation} ${t.countUnit}`,
+    t.coverageLine(s.coverage.total, s.coverage.checked, s.coverage.partial),
+  ];
+}
+
+function renderDetails(
+  assessment: Assessment,
+  header: (s: OwnerSummary) => string[],
+  checksLine: string,
+  needsValidationHeading: string,
+): string {
   const summary: OwnerSummary = {
     host: targetName(assessment),
     scannedAt: assessment.startedAt,
@@ -165,12 +200,12 @@ export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof,
     (r): r is NeedsValidationRecord => r.verdict === 'needs_validation',
   );
 
-  const lines = [...ownerHeader(summary), ...incompleteLine(summary), t.checksOwner, '', t.findingsHeading];
+  const lines = [...header(summary), ...incompleteLine(summary), checksLine, '', t.findingsHeading];
   if (confirmed.length === 0) lines.push(t.noFindings, '');
   else confirmed.forEach((r, i) => lines.push(...renderConfirmed(r, i + 1), ''));
 
   if (needsValidation.length > 0) {
-    lines.push(t.needsValidationHeading);
+    lines.push(needsValidationHeading);
     needsValidation.forEach((r, i) => lines.push(...renderNeedsValidation(r, i + 1), ''));
   }
 

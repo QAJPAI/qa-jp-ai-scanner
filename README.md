@@ -14,8 +14,8 @@ There are two entrances. Both produce the same result format.
 
 | Entrance | Status |
 |---|---|
-| A. URL of a deployed site | Built (this document) |
-| B. Source code, before deployment | Planned |
+| A. URL of a deployed site | Built: R01 hint, R02, R11, R14 |
+| B. Source code, before deployment | Built: R01, R02 |
 
 ## Rules for AI coding tools (free)
 
@@ -47,6 +47,40 @@ ownership is verified.
 - **Coverage**: for each of the 15 rules, whether it was examined, partly
   examined, or not examined and why. A rule that was not examined is never
   reported as passed.
+
+## Entrance B: source code, before deployment
+
+```sh
+npx tsx src/cli.ts check ./my-app          # Japanese report
+npx tsx src/cli.ts check ./my-app --json   # the assessment, for tools
+```
+
+Reads the project's files and nothing else: no code is run, nothing is sent
+anywhere, and symbolic links are never followed, so nothing outside the folder
+is read. Whoever runs it holds the code, so the full report is shown without
+further proof.
+
+| ID | What it finds | Verdict |
+|---|---|---|
+| R01 | Supabase: a table in `public` whose migrations never enable RLS; a policy of `using (true)` for update, delete or all | confirmed, P0 |
+| R01 | Supabase: a public read or open insert policy (may be intended); RLS switched inside a function the replay cannot follow; Supabase used but no table definitions in the code | needs_validation |
+| R01 | Firebase: rules with no condition or `if true` (any write, or reads of everything); test mode | confirmed, P0 |
+| R01 | Firebase: public read of one path; "any signed-in user"; Firebase used but no rules in the code | needs_validation |
+| R02 | A key written into a file that will be committed | confirmed (P0, or P1 for Stripe test keys and AWS key IDs) |
+| R02 | A secret under a variable name the build copies into browser code (`VITE_`, `NEXT_PUBLIC_`, `REACT_APP_` …), found in an env file or in code | confirmed, P0 |
+| R02 | An env file holding secrets that `.gitignore` does not exclude | confirmed, P0 |
+| R02 | A key-shaped value in a test or fixture (fake is fine, real must be revoked) | needs_validation |
+
+R01 is always `partial` with the note `code_only`: settings changed in a
+dashboard are invisible to a code check. A project that uses neither Supabase
+nor Firebase gets R01 `not_run` / `not_applicable`, never "passed". Rules that
+only a deployed site can answer (R11, R14) are `not_run` /
+`requires_deployed_site`.
+
+Placeholders in documentation and templates (`sk_live_xxxx…`,
+`sk-proj-your-key-here`, `AKIAIOSFODNN7EXAMPLE`) are not findings. The cost of
+that filter is measured: about 1 to 2 real keys in 100,000 would be dismissed by
+chance (`test/placeholder.test.ts` fails if this rises).
 
 ## Entrance A: URL
 
@@ -135,6 +169,7 @@ Only check sites you own or have permission to check.
 - The lower-level `scan()` returns every detail at either tier. It is not exported from the package entry point; a service must use `scanPublic()` for unverified requesters.
 - `.env` files that start with more than 8 KB of comments, and source maps not referenced from a script, are not found.
 - No web UI, rate limiting or audit log yet. These are required before any public deployment.
+- Source-code check: it does not run git, so it cannot see keys that were committed in the past and later deleted. It replays SQL far enough to judge RLS and policies, and is not a SQL parser: views (which bypass RLS by default), storage buckets and `security definer` functions are not yet checked. The `.gitignore` matcher covers what env-file rules use in practice, not every corner of git's syntax.
 - A grade of A means nothing was found in the checks that ran. It does not mean the site is safe.
 
 ## Acknowledgements

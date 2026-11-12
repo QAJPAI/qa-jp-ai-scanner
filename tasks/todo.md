@@ -51,6 +51,22 @@
 - [x] Licence of the rules file: CC0-1.0 (decided 2026-11-12), so it can be copied into any project with no conditions
 - [ ] Measure its effect: build the same small app with and without it, and scan both
 
+### Entrance B, step 1 (2026-11-12, engine 0.5.0)
+- [x] Safe folder loading: no symlinks (O_NOFOLLOW too), caps on size / count / total / depth, everything skipped counted
+- [x] Key detection shared with entrance A; documentation placeholders filtered, miss rate measured (~1-2 in 100,000)
+- [x] R01 Supabase: migrations replayed in order (create, enable/disable, rename, drop, create/alter/drop policy); comments, strings and function bodies blanked in one linear pass
+- [x] R01 Firebase: Firestore and Storage rules (match nesting with `{capture}` segments), Realtime Database JSON
+- [x] R02: keys in committed files; secrets under browser-exposed env names; env files not ignored by git
+- [x] Tests and documents are not evidence of use; key-shaped values in tests are needs_validation
+- [x] `check` command; Japanese report; validator accepts every repo assessment
+- [x] 12 safeguard mutations each fail the suite; the scanner checks its own repository clean
+
+### Entrance B, next
+- [ ] Step 2: call the check from inside AI coding tools
+- [ ] Step 3: a copy-paste fix request for each finding, and "fixed" confirmation on re-run
+- [ ] R01: views without security_invoker, storage buckets marked public, security definer functions
+- [ ] R02: keys committed in the past (needs git history)
+
 ### Open after review
 - [ ] Service layer must notify the domain's admin address and log whenever details are unlocked (method A lets any mailbox holder in an organisation in)
 - [x] Decided 2026-11-12: the public tier shows basic configuration only; nothing about owner-disclosure rules, not even counts (engine 0.4.0)
@@ -64,6 +80,15 @@
 - [ ] Legal review of the verification flow and terms before any public deployment
 - [ ] R04 "existence-only" check — define the detect/exploit boundary first
 - [ ] Discover runtime-loaded chunks (build manifests) for R02
+
+## Review (2026-11-12, engine 0.5.0)
+
+- 91 tests pass; `tsc --noEmit` clean; suite runs in about 15 s.
+- Mutation check on the new layer: removing each of 12 safeguards (symlink refusal, function-body blanking, uncertain-RLS handling, placeholder filter in both directions, nested .gitignore, read-vs-write policy, test-mode detection, comment blanking, linear string blanking, match-path reading, env-template handling) makes the suite fail. The five URL-layer guard mutations still fail it too.
+- Two of those mutations first went unnoticed. Strengthening the fixtures to catch them exposed a real defect: Firestore `match` paths were read only up to the first `{`, so `{database}` was taken for a block, nesting was lost and `{document=**}` was never recognised. Fixed and covered.
+- Running the check on this repository itself first gave five false P0s and two false questions, all from tests and from the scanner's own source mentioning service domains. Fixed by treating tests and documents as non-evidence and requiring a real project URL; the repository now checks clean.
+- Placeholder filtering: 1,000,000 random keys per shape, miss rate 0.0012-0.0019 %.
+- Still not verified: real projects built by non-engineers. No third-party code was scanned.
 
 ## Review (2026-11-12, engine 0.3.0)
 
