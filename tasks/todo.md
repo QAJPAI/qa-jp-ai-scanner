@@ -45,6 +45,12 @@
 - [x] Guard error messages revealed internal DNS results
 - [x] Tests that passed with the guard partly removed (verified by mutation)
 
+### Prevention first (2026-11-12)
+- [x] `rules/security-rules.ja.md` v0.1: the 15 rules as instructions for AI coding tools, with a pre-release self-check in three verdicts
+- [x] Test keeps the file and the rule registry in step
+- [ ] Decide the licence of the rules file (it is meant to be copied into anyone's project, so a permissive one)
+- [ ] Measure its effect: build the same small app with and without it, and scan both
+
 ### Open after review
 - [ ] Service layer must notify the domain's admin address and log whenever details are unlocked (method A lets any mailbox holder in an organisation in)
 - [x] Decided 2026-11-12: the public tier shows basic configuration only; nothing about owner-disclosure rules, not even counts (engine 0.4.0)

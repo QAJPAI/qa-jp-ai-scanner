@@ -17,6 +17,18 @@ There are two entrances. Both produce the same result format.
 | A. URL of a deployed site | Built (this document) |
 | B. Source code, before deployment | Planned |
 
+## Rules for AI coding tools (free)
+
+[`rules/security-rules.ja.md`](rules/security-rules.ja.md) is the 15 rules
+written as instructions for an AI coding tool, in Japanese. A person with no
+programming background pastes it into their project's `AGENTS.md` or
+`CLAUDE.md`; from then on their AI follows it while building, and reports a
+pre-release check in the same three verdicts the scanner uses.
+
+Preventing a problem while the app is being written is cheaper than finding it
+afterwards. Using the file is not certification. Its effect has not been
+measured yet.
+
 ## Results
 
 Every result has three parts, and none is shown without the others. All three
