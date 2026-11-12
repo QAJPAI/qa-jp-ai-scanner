@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
+import { scanRepo } from '../src/repo/scan';
 
 /**
  * The files people copy into their projects must stay in step with the tool:
@@ -98,4 +99,12 @@ test('no file in the repository hides control or reordering characters', () => {
   };
   walk(root);
   assert.deepEqual(offenders, []);
+});
+
+test('this repository passes its own pre-release check', async () => {
+  // Deliberately bad examples live in test/ and evals/. If one leaks out of
+  // them, or a new folder of examples is not recognised, this fails.
+  const assessment = await scanRepo(root);
+  const flagged = assessment.records.map((r) => `${r.verdict} ${r.code} ${r.location}`);
+  assert.deepEqual(flagged, []);
 });

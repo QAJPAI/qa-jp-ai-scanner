@@ -46,7 +46,7 @@ export interface RepoContext {
 
 export const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
-const TEST_DIR = /(?:^|\/)(?:test|tests|__tests__|spec|specs|fixtures?|__fixtures__|__mocks__|e2e|cypress|playwright)\//i;
+const TEST_DIR = /(?:^|\/)(?:test|tests|__tests__|spec|specs|fixtures?|__fixtures__|__mocks__|e2e|cypress|playwright|evals?|benchmarks?)\//i;
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/i;
 
 /** Tests and their fixtures: not shipped, often full of deliberately bad examples. */

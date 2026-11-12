@@ -405,6 +405,7 @@ test('tests and fixtures: a key-shaped value is handed to the owner, and mention
     'test/fixtures/keys.ts': `export const fakeStripe = "${stripeLive}";\nconst url = "https://abcdefghijklmnopqrst.supabase.co";\n`,
     'src/pay.test.ts': 'const k = import.meta.env.VITE_OPENAI_API_KEY;\n',
     'docs/setup.md': 'Point VITE_SUPABASE_URL at https://abcdefghijklmnopqrst.supabase.co and my-app.firebaseapp.com\n',
+    'evals/demo/build.ts': `const env = "NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY=";\nconst url = "https://abcdefghijklmnopqrst.supabase.co";\n`,
   });
   const a = await scanRepo(root);
   assert.deepEqual(validateAssessment(a), []);
