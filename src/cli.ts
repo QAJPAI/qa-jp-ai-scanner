@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { SEVERITIES, type Severity } from './core/types';
 import { validateAssessment } from './core/validate';
+import { renderHandoff } from './handoff';
 import { ownership as ownershipText, scanErrorText } from './i18n/ja';
 import { dnsRecordName, verifyByDns } from './ownership/dns';
 import { verifyByFile } from './ownership/file';
@@ -17,10 +19,14 @@ import { normalizeTarget, ScanError, scanOwner, scanPublic } from './url/scan';
 
 const USAGE = `Usage:
   qa-scan check [folder]                         Pre-deployment check of your own source code (default: current folder)
+      --for-ai                                   Output a hand-off for an AI coding tool instead of the report
+      --fail-on P0|P1|P2                         Exit with code 3 if a confirmed problem of this level or worse is found
   qa-scan <url>                                  Public summary (passive checks only)
   qa-scan token <url> --account <id>             Show the ownership token and how to place it
   qa-scan <url> --account <id> --verify file|dns Verify ownership, then show the detailed report
   qa-scan validate <assessment.json>             Check that an assessment is well-formed and consistent
+
+Exit codes: 0 done, 1 error, 2 usage, 3 problems found at the --fail-on level.
 
 Options:
   --json   Print machine-readable output. Without verification this is the public
@@ -66,6 +72,8 @@ async function main(): Promise<number> {
       account: { type: 'string' },
       verify: { type: 'string' },
       json: { type: 'boolean' },
+      'for-ai': { type: 'boolean' },
+      'fail-on': { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -84,9 +92,24 @@ async function main(): Promise<number> {
   }
 
   if (positionals[0] === 'check') {
+    const failOn = values['fail-on']?.toUpperCase();
+    if (failOn !== undefined && !(SEVERITIES as readonly string[]).includes(failOn)) {
+      console.error('--fail-on must be P0, P1 or P2');
+      return 2;
+    }
     // Reads files only: no code is run and nothing is sent anywhere.
     const assessment = await scanRepo(positionals[1] ?? '.');
-    console.log(values.json ? JSON.stringify(assessment, null, 2) : renderLocalReport(assessment));
+    if (values.json) console.log(JSON.stringify(assessment, null, 2));
+    else if (values['for-ai']) console.log(renderHandoff(assessment));
+    else console.log(renderLocalReport(assessment));
+
+    if (failOn) {
+      const threshold = SEVERITIES.indexOf(failOn as Severity);
+      const hit = assessment.records.some(
+        (r) => r.verdict === 'confirmed' && SEVERITIES.indexOf(r.severity) <= threshold,
+      );
+      if (hit) return 3;
+    }
     return 0;
   }
 

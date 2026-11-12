@@ -4,7 +4,7 @@ import { Agent, request } from 'undici';
 import { isIP } from 'node:net';
 import { BlockedAddressError, guardedLookup, isBlockedAddress } from './guard';
 
-export const USER_AGENT = 'QA.JP.AI-Scanner/0.5 (+https://qa.jp.ai)';
+export const USER_AGENT = 'QA.JP.AI-Scanner/0.6 (+https://qa.jp.ai)';
 
 export interface FetchOptions {
   /** Tests only: allow loopback/private targets and non-standard ports, unguarded. */

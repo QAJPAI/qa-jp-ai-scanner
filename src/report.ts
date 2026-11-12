@@ -5,6 +5,7 @@ import type { CoverageUnit } from './core/coverage';
 import type { ConfirmedRecord, NeedsValidationRecord } from './core/records';
 import { SEVERITIES, type Severity } from './core/types';
 import { proofCovers, type OwnershipProof } from './ownership/proof';
+import { cleanText } from './text';
 import {
   blockerLabel,
   coverageNoteLabel,
@@ -39,7 +40,7 @@ export type PublicSummary = Headed & Omit<Summary, 'needsValidation'>;
 
 type OwnerSummary = Headed & Summary;
 
-function targetName(assessment: Assessment): string {
+export function targetName(assessment: Assessment): string {
   return assessment.target.layer === 'url' ? assessment.target.host : assessment.target.ref;
 }
 
@@ -72,7 +73,7 @@ const countsText = (s: PublicSummary, severities: readonly Severity[]) =>
 
 const headLines = (title: string, s: Headed): string[] => [
   title,
-  `${t.target}: ${s.host}`,
+  `${t.target}: ${cleanText(s.host, 120)}`,
   `${t.scannedAt}: ${JST.format(new Date(s.scannedAt))}（日本時間）`,
 ];
 
@@ -114,8 +115,8 @@ function renderConfirmed(r: ConfirmedRecord, index: number): string[] {
   const text = findingTextFor(r.layer, r.code);
   return [
     `${index}. [${r.severity}・${severityLabel[r.severity]}] ${text?.title ?? r.code}（${r.ruleId}）`,
-    `   ${t.location}: ${r.location}`,
-    `   ${t.evidence}: ${r.evidence}`,
+    `   ${t.location}: ${cleanText(r.location)}`,
+    `   ${t.evidence}: ${cleanText(r.evidence)}`,
     `   ${t.fix}: ${text?.fix ?? '-'}`,
   ];
 }
@@ -124,8 +125,8 @@ function renderNeedsValidation(r: NeedsValidationRecord, index: number): string[
   const text = needsValidationText[r.code];
   return [
     `${index}. ${text?.title ?? r.code}（${r.ruleId}）`,
-    `   ${t.location}: ${r.location}`,
-    `   ${t.evidence}: ${r.evidence}`,
+    `   ${t.location}: ${cleanText(r.location)}`,
+    `   ${t.evidence}: ${cleanText(r.evidence)}`,
     `   ${t.reason}: ${blockerLabel[r.blocker]}`,
     `   ${t.whatToCheck}: ${text?.plan ?? '-'}`,
   ];
@@ -172,7 +173,7 @@ export function renderLocalReport(assessment: Assessment): string {
 function localHeader(s: OwnerSummary): string[] {
   return [
     t.localTitle,
-    `${t.folder}: ${s.host}`,
+    `${t.folder}: ${cleanText(s.host, 120)}`,
     `${t.scannedAt}: ${JST.format(new Date(s.scannedAt))}（日本時間）`,
     `${t.grade}: ${s.grade}（${gradeLabel[s.grade]}）`,
     `${t.counts}: ${countsText(s, SEVERITIES)}`,

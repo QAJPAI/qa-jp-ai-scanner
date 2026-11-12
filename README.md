@@ -51,9 +51,29 @@ ownership is verified.
 ## Entrance B: source code, before deployment
 
 ```sh
-npx tsx src/cli.ts check ./my-app          # Japanese report
-npx tsx src/cli.ts check ./my-app --json   # the assessment, for tools
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check .              # Japanese report
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check . --for-ai     # hand-off for an AI coding tool
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check . --json       # the assessment, for tools
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
 ```
+
+From a clone: `npm install`, then `npx tsx src/cli.ts check ./my-app`.
+
+### Inside AI coding tools
+
+Someone with no programming background should be able to say
+「公開前チェックをしてください」 and get a sound result. [`integrations/`](integrations/README.ja.md)
+holds what makes that work (Japanese, CC0):
+
+- a Claude Code skill, and the same steps in the rules file for tools that read
+  `AGENTS.md` (Cursor, Codex, Windsurf …);
+- the AI runs `check --for-ai` and receives a hand-off in three parts: what the
+  tool confirmed (pass on unchanged), what only the owner can decide (ask, do
+  not answer), and what the tool did not examine (review it, and label the
+  result as the AI's own judgement);
+- text taken from the project is cleaned of control and reordering characters
+  and marked as data, so a file or policy name cannot pass itself off as an
+  instruction.
 
 Reads the project's files and nothing else: no code is run, nothing is sent
 anywhere, and symbolic links are never followed, so nothing outside the folder

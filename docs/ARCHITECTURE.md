@@ -56,6 +56,16 @@ evidence from both.
 - Key detection is shared with entrance A (`src/detect/secrets.ts`), so a key
   has the same fingerprint wherever it is found.
 
+### Handing off to an AI coding tool
+
+`src/handoff.ts` renders an assessment for an AI rather than a person. It keeps
+apart what carries different weight: confirmed records (to be passed on
+unchanged), needs_validation records (to be asked, not answered), and every
+coverage unit that is not `checked` (for the AI to review, labelled as its own
+judgement). The AI is another inspector; its findings are never merged into
+the scanner's verdicts. Every string taken from the project goes through
+`cleanText()` (`src/text.ts`) first.
+
 ## Core objects
 
 | Object | File | What it is |
@@ -142,7 +152,11 @@ src/url/         entrance A: fetch guard, context loading, checkers
 src/repo/        entrance B: safe folder loading, .gitignore matching, checkers
 src/ownership/   proof of ownership: mailbox, verification file, DNS
 src/i18n/ja.ts   every string a person reads
-src/report.ts    public summary and owner report, derived from an Assessment
+src/report.ts    public summary, owner report and local report, derived from an Assessment
+src/handoff.ts   the same assessment as a hand-off for an AI coding tool
+src/text.ts      cleaning of text taken from the thing being checked
+integrations/    files people copy into their projects (CC0)
+scripts/build.mjs  bundles the command for npx
 src/cli.ts       command line
 ```
 
@@ -150,7 +164,8 @@ src/cli.ts       command line
 
 - Entrance B beyond R01 and R02, including adapters for external audit methods
   and cross-vendor verification.
-- Calling entrance B from inside an AI coding tool.
+- Recording the AI's own review as structured data (today it is prose in the
+  AI's report, kept apart from the assessment).
 - Combining several runs into one assessment.
 - Certificates, the public registry and revocation.
 - The web service: UI, login-link mail, rate limiting, audit log.

@@ -1,12 +1,24 @@
 {
   "name": "qa-jp-ai-scanner",
-  "version": "0.5.0",
-  "description": "QA.JP.AI scanner for AI-generated web apps. URL layer: passive checks for anyone, details for verified owners only.",
+  "version": "0.6.0",
+  "description": "QA.JP.AI scanner for AI-built web apps: a pre-release check of your own code, and a URL check that shows details only to verified owners.",
   "type": "module",
+  "bin": {
+    "qa-scan": "dist/qa-scan.mjs"
+  },
+  "files": [
+    "dist/",
+    "rules/",
+    "integrations/",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepare": "node scripts/build.mjs",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
     "scan": "tsx src/cli.ts"
@@ -17,6 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   },
@@ -24,7 +37,7 @@
   "author": "iQi <iqi@email.jp.ai>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/AgenticAIJP/qa-jp-ai-scanner.git"
+    "url": "git+https://github.com/QAJPAI/qa-jp-ai-scanner.git"
   },
   "bugs": {
     "email": "qa@email.jp.ai"

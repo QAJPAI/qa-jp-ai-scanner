@@ -29,3 +29,5 @@ export { ownershipSubject, type OwnershipProof } from './ownership/proof';
 
 // Reports (Japanese).
 export { toPublicSummary, renderPublicSummary, renderOwnerReport, renderLocalReport, type PublicSummary } from './report';
+export { renderHandoff } from './handoff';
+export { cleanText } from './text';
