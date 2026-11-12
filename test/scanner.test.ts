@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { closeAgents } from '../src/net/fetcher';
+import { summarize } from '../src/core/assessment';
+import type { Checker } from '../src/core/checker';
+import { validateAssessment } from '../src/core/validate';
 import { confirmEmailOwnership } from '../src/ownership/email';
 import { verifyByFile, WELL_KNOWN_PATH } from '../src/ownership/file';
 import { PROOF_TTL_MS } from '../src/ownership/proof';
 import { mintVerificationToken } from '../src/ownership/token';
 import { renderOwnerReport, renderPublicSummary, toPublicSummary } from '../src/report';
-import { extractScriptUrls, scan } from '../src/scanner';
+import type { UrlContext } from '../src/url/context';
+import { closeAgents } from '../src/url/net/fetcher';
+import { extractScriptUrls, scan, URL_CHECKERS } from '../src/url/scan';
 import { fake, html, startFixture } from './fixture';
 
 after(closeAgents);
@@ -16,6 +20,7 @@ after(closeAgents);
 const OPTS = { fetch: { allowPrivate: true } };
 const TOKEN = mintVerificationToken('test-secret-0123456789', 'acct-1', '127.0.0.1');
 const ENV_VALUE = 'SUPER_SECRET_DB_PASSWORD_VALUE';
+const SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co';
 
 const serviceRole = fake.supabaseJwt('service_role');
 const stripeLive = fake.stripeLive();
@@ -27,7 +32,7 @@ const vulnerableSite = () =>
     '/': { headers: { 'content-type': 'text/html' }, body: html(['/assets/app.js'], `window.AI_KEY="${openai}"`) },
     '/assets/app.js': {
       headers: { 'content-type': 'application/javascript' },
-      body: `const supabase=createClient("https://x.supabase.co","${serviceRole}");const s=Stripe("${stripeLive}");\n//# sourceMappingURL=app.js.map`,
+      body: `const supabase=createClient("${SUPABASE_URL}","${serviceRole}");const s=Stripe("${stripeLive}");\n//# sourceMappingURL=app.js.map`,
     },
     '/assets/app.js.map': { body: '{"version":3,"sources":["src/App.tsx"],"mappings":""}' },
     '/.env': { body: `DATABASE_PASSWORD=${ENV_VALUE}\nSTRIPE_KEY=abc\n` },
@@ -35,28 +40,48 @@ const vulnerableSite = () =>
     [WELL_KNOWN_PATH]: { body: TOKEN },
   });
 
+const coverageOf = (a: { coverage: { ruleId: string; status: string; reason?: string }[] }, ruleId: string) =>
+  a.coverage.find((u) => u.ruleId === ruleId)!;
+
 test('public tier: counts only, passive requests only, nothing identifying', async () => {
   const site = await vulnerableSite();
   try {
-    const result = await scan(site.origin, OPTS);
-    assert.equal(result.tier, 'public');
-    assert.deepEqual(result.checksRun, ['R02', 'R14']);
-    assert.equal(result.counts.P0, 3, 'service_role + Stripe live + OpenAI');
-    assert.equal(result.grade, 'E');
+    const assessment = await scan(site.origin, OPTS);
+    assert.equal(assessment.tier, 'public');
+    assert.deepEqual(validateAssessment(assessment), []);
 
     // Passive means passive: only the page and the script it references.
     assert.deepEqual(site.requests, ['/', '/assets/app.js']);
 
-    const summary = toPublicSummary(result);
-    assert.equal('findings' in summary, false);
+    // The ledger says what was and was not examined.
+    assert.equal(assessment.coverage.length, 15);
+    assert.equal(coverageOf(assessment, 'R02').status, 'partial');
+    assert.equal(coverageOf(assessment, 'R14').status, 'checked');
+    assert.equal(coverageOf(assessment, 'R01').status, 'partial');
+    assert.deepEqual(
+      [coverageOf(assessment, 'R11').status, coverageOf(assessment, 'R11').reason],
+      ['not_run', 'requires_owner_verification'],
+    );
+    assert.equal(coverageOf(assessment, 'R05').reason, 'requires_source');
+
+    const summary = toPublicSummary(assessment);
+    assert.equal(summary.counts.P0, 3, 'service_role + Stripe live + OpenAI');
+    assert.equal(summary.counts.P1, 1, 'no HTTPS');
+    assert.equal(summary.grade, 'E');
+    assert.equal(summary.needsValidation, 1, 'Supabase RLS cannot be seen from outside');
+    assert.deepEqual([summary.coverage.checked, summary.coverage.partial, summary.coverage.total], [1, 2, 15]);
+    assert.equal('records' in summary, false);
+
     const text = renderPublicSummary(summary) + JSON.stringify(summary);
-    for (const leak of ['service_role', 'Supabase', 'Stripe', 'OpenAI', 'app.js', 'offset', serviceRole, stripeLive, openai, 'sk_liv', 'eyJ']) {
+    for (const leak of ['service_role', 'Supabase', 'supabase', 'Stripe', 'OpenAI', 'RLS', 'app.js', 'offset', 'fp_', serviceRole, stripeLive, openai, 'sk_liv', 'eyJ']) {
       assert.equal(text.includes(leak), false, `public output leaks "${leak}"`);
     }
     assert.match(text, /総合評価: E/);
     assert.match(text, /P0（至急）3 件/);
+    assert.match(text, /確認をお願いしたい項目: 1 件/);
+    assert.match(text, /全 15 項目のうち 1 項目を検査、2 項目を一部検査/);
 
-    assert.throws(() => renderOwnerReport(result), /ownership proof/);
+    assert.throws(() => renderOwnerReport(assessment), /ownership proof/);
   } finally {
     await site.close();
   }
@@ -68,15 +93,17 @@ test('owner tier: file verification unlocks details and the active checks', asyn
     const proof = await verifyByFile(site.origin, TOKEN, { allowPrivate: true });
     assert.ok(proof);
 
-    const result = await scan(site.origin, { ...OPTS, proof });
-    assert.equal(result.tier, 'owner');
-    assert.deepEqual(result.checksRun, ['R02', 'R14', 'R11']);
+    const assessment = await scan(site.origin, { ...OPTS, proof });
+    assert.equal(assessment.tier, 'owner');
+    assert.deepEqual(validateAssessment(assessment), []);
+    assert.equal(coverageOf(assessment, 'R11').status, 'checked');
 
-    const codes = result.findings.map((f) => f.code);
+    const codes = assessment.records.map((r) => r.code);
     for (const expected of [
       'secret.supabase_service_role',
       'secret.stripe_live',
       'secret.openai',
+      'baas.supabase_rls_unverified',
       'exposed.env',
       'exposed.git',
       'exposed.sourcemap',
@@ -85,28 +112,44 @@ test('owner tier: file verification unlocks details and the active checks', asyn
       assert.ok(codes.includes(expected), `missing ${expected}`);
     }
 
-    const report = renderOwnerReport(result);
+    const report = renderOwnerReport(assessment);
     assert.match(report, /service_role キーがフロントエンドに含まれています/);
     assert.match(report, /環境変数ファイル（\.env）が外部から取得できる状態です/);
     assert.match(report, /2 件の変数名を確認/);
     assert.match(report, /修正方法:/);
+    assert.match(report, /■ 確認をお願いしたい項目/);
+    assert.match(report, /すべてのテーブルの RLS が有効になっていること/);
+    assert.match(report, /R05 利用者が自分の権限や認証状態を書き換えられる: 未検査（ソースコードの検査が必要なため、今後対応予定です）/);
 
     // Detect-only: full keys and file contents never reach the report or the result.
-    const everything = report + JSON.stringify(result);
+    const everything = report + JSON.stringify(assessment);
     for (const secret of [serviceRole, stripeLive, openai, ENV_VALUE, 'src/App.tsx']) {
       assert.equal(everything.includes(secret), false, 'report contains fetched secret material');
     }
 
-    // A public summary derived from an owner scan must not reveal active-check results.
     // Passive: 3 keys (P0) + no HTTPS (P1). Active adds .env (P0) and .git (P1).
-    const publicCounts = toPublicSummary(result).counts;
-    assert.deepEqual([publicCounts.P0, publicCounts.P1], [3, 1]);
-    assert.deepEqual([result.counts.P0, result.counts.P1], [4, 2]);
-    const severityOf = (code: string) => result.findings.find((f) => f.code === code)?.severity;
-    assert.equal(severityOf('exposed.env'), 'P0');
-    assert.equal(severityOf('transport.no_https'), 'P1');
+    const asPublic = toPublicSummary(assessment);
+    const asOwner = summarize(assessment);
+    assert.deepEqual([asPublic.counts.P0, asPublic.counts.P1], [3, 1]);
+    assert.deepEqual([asOwner.counts.P0, asOwner.counts.P1], [4, 2]);
+    // The public view of an owner assessment must not show that R11 ran.
+    assert.equal(asPublic.coverage.checked, 1);
+    assert.equal(asOwner.coverage.checked, 2);
   } finally {
     await site.close();
+  }
+});
+
+test('fingerprints are stable across runs and ports', async () => {
+  const first = await vulnerableSite();
+  const second = await vulnerableSite();
+  try {
+    const a = await scan(first.origin, OPTS);
+    const b = await scan(second.origin, OPTS);
+    assert.notEqual(first.origin, second.origin);
+    assert.deepEqual(a.records.map((r) => r.fingerprint).sort(), b.records.map((r) => r.fingerprint).sort());
+  } finally {
+    await Promise.all([first.close(), second.close()]);
   }
 });
 
@@ -126,17 +169,37 @@ test('a proof for another site, or an expired one, is rejected', async () => {
   }
 });
 
-test('public-by-design keys produce no finding', async () => {
+test('public-by-design keys are not findings, but the owner is asked to check the access rules', async () => {
   const site = await startFixture({
     '/': { headers: { 'content-type': 'text/html' }, body: html(['/app.js']) },
     '/app.js': {
-      body: `createClient("https://x.supabase.co","${fake.supabaseJwt('anon')}");Stripe("${fake.stripePublishable()}")`,
+      body: `createClient("${SUPABASE_URL}","${fake.supabaseJwt('anon')}");Stripe("${fake.stripePublishable()}");initializeApp({authDomain:"my-clinic.firebaseapp.com"})`,
     },
   });
   try {
-    const result = await scan(site.origin, OPTS);
-    assert.deepEqual(result.findings.filter((f) => f.ruleId === 'R02'), []);
-    assert.equal(result.counts.P0, 0);
+    const assessment = await scan(site.origin, OPTS);
+    assert.deepEqual(assessment.records.filter((r) => r.ruleId === 'R02'), []);
+    const hints = assessment.records.filter((r) => r.ruleId === 'R01');
+    assert.deepEqual(hints.map((r) => [r.verdict, r.code]).sort(), [
+      ['needs_validation', 'baas.firebase_rules_unverified'],
+      ['needs_validation', 'baas.supabase_rls_unverified'],
+    ]);
+    const summary = summarize(assessment);
+    assert.equal(summary.counts.P0, 0);
+    assert.equal(summary.needsValidation, 2, 'needs_validation is not a finding and has no severity');
+  } finally {
+    await site.close();
+  }
+});
+
+test('a site that uses neither service gets no access-rule item', async () => {
+  const site = await startFixture({
+    '/': { headers: { 'content-type': 'text/html' }, body: html(['/app.js']) },
+    '/app.js': { body: 'console.log("hello")' },
+  });
+  try {
+    const assessment = await scan(site.origin, OPTS);
+    assert.equal(summarize(assessment).needsValidation, 0);
   } finally {
     await site.close();
   }
@@ -150,9 +213,32 @@ test('an SPA that answers every path with index.html is not reported as exposing
   );
   try {
     const proof = (await verifyByFile(site.origin, TOKEN, { allowPrivate: true }))!;
-    const result = await scan(site.origin, { ...OPTS, proof });
+    const assessment = await scan(site.origin, { ...OPTS, proof });
     assert.ok(site.requests.includes('/.env'), 'owner tier does probe');
-    assert.deepEqual(result.findings.filter((f) => f.ruleId === 'R11'), []);
+    assert.deepEqual(assessment.records.filter((r) => r.ruleId === 'R11'), []);
+  } finally {
+    await site.close();
+  }
+});
+
+test('a checker that fails is recorded as an error, never as "nothing found"', async () => {
+  const site = await startFixture({ '/': { headers: { 'content-type': 'text/html' }, body: html([]) } });
+  const broken: Checker<UrlContext> = {
+    id: 'url.broken',
+    layer: 'url',
+    mode: 'passive',
+    rules: ['R02'],
+    run() {
+      throw new Error('boom');
+    },
+  };
+  try {
+    const checkers = [broken, ...URL_CHECKERS.filter((c) => !c.rules.includes('R02'))];
+    const assessment = await scan(site.origin, { ...OPTS, checkers });
+    assert.equal(coverageOf(assessment, 'R02').status, 'error');
+    assert.deepEqual(validateAssessment(assessment), []);
+    const summary = summarize(assessment);
+    assert.equal(summary.coverage.error, 1);
   } finally {
     await site.close();
   }

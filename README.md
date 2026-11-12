@@ -2,11 +2,34 @@
 
 The QA.JP.AI scanner for AI-generated web apps.
 
-This repository is the home for every layer of the scanner. What exists today
-is the URL layer. The repository layer (deep review of source code) and the
-public benchmark will be added here as they are built.
+Many small businesses want their own site or tool, build it with AI, and cannot
+tell whether it is safe to put online. This scanner is meant to tell them, for
+free, before an attacker finds out first.
 
-## URL layer
+**QA.JP.AI owns the judging layer; inspectors are pluggable.** The rules, the
+verdict contracts, the coverage ledger and the validator are public and the same
+for every inspector. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+There are two entrances. Both produce the same result format.
+
+| Entrance | Status |
+|---|---|
+| A. URL of a deployed site | Built (this document) |
+| B. Source code, before deployment | Planned |
+
+## Results
+
+Every result has three parts, and none is shown without the others.
+
+- **Problems found** (`confirmed`): evidence was observed. Graded P0 / P1 / P2.
+- **Items for the owner to check** (`needs_validation`): a concrete concern that
+  cannot be decided from outside. Not graded. Example: a site that connects to
+  Supabase from the browser is asked to confirm row-level security is on.
+- **Coverage**: for each of the 15 rules, whether it was examined, partly
+  examined, or not examined and why. A rule that was not examined is never
+  reported as passed.
+
+## Entrance A: URL
 
 Anyone can run a passive check on a URL and get a grade and counts. What the
 problems are, where they are, and how to fix them is shown only to someone who
@@ -19,11 +42,12 @@ Code and identifiers are English. Everything a user reads is Japanese
 
 | Rule | How the code enforces it |
 |---|---|
-| Unverified requesters get counts only | `toPublicSummary()` drops findings; `renderOwnerReport()` throws unless the scan ran with a valid proof |
-| Unverified scans are passive | Only the page and the same-site scripts it references are fetched. Active probes (R11) run only when `scan()` receives an `OwnershipProof` |
+| Unverified requesters get counts only | `toPublicSummary()` keeps the grade, counts and coverage totals and drops every record; `renderOwnerReport()` throws unless the scan ran with a valid proof |
+| Unverified scans are passive | Only the page and the same-site scripts it references are fetched. Active checkers run only when `scan()` receives an `OwnershipProof`, and the public summary does not reveal that they ran |
 | Detect, never exploit | A detected key is never sent anywhere. Evidence keeps a 6-character prefix and a length. File probes keep a boolean and a count, not contents |
-| The scanner cannot be aimed at internal networks | `src/net/guard.ts` blocks loopback, private, link-local and metadata addresses at connect time (covers DNS rebinding), plus non-standard ports |
+| The scanner cannot be aimed at internal networks | `src/url/net/guard.ts` blocks loopback, private, link-local and metadata addresses at connect time (covers DNS rebinding), plus non-standard ports |
 | Details are unlocked by ownership, not by contact details | The only way to obtain an `OwnershipProof` is one of the three verification methods |
+| A result can be checked by someone else | `--json` emits the full assessment for a verified owner; `validate` checks any assessment for consistency |
 
 ## Ownership verification
 
@@ -37,10 +61,11 @@ Method A refuses free and carrier mail, refuses hosting-platform subdomains,
 and accepts only admin mailboxes (`admin@`, `administrator@`, `webmaster@`,
 `hostmaster@`, `postmaster@`) on large shared domains such as `ac.jp` and `go.jp`.
 
-## Rules implemented (v0.1.0)
+## Rules implemented (rules v0.1.0)
 
 | ID | What | Severity | Tier |
 |---|---|---|---|
+| R01 | Direct browser connection to Supabase or Firebase detected: asks the owner to confirm the access rules | Not graded (`needs_validation`) | public |
 | R02 | Privileged keys shipped to the browser (Supabase service_role / secret, OpenAI, Anthropic, Stripe, AWS, GitHub, Slack, SendGrid, private keys) | P0 (Stripe test key, AWS key ID: P1) | public |
 | R14 | HTTPS, HSTS, CSP, nosniff, clickjacking protection, cookie attributes | No HTTPS: P1. Others: P2 | public |
 | R11 | Exposed `.env`, `.git`, source maps | `.env`: P0. `.git`: P1. Source maps: P2 | owner |
@@ -65,6 +90,10 @@ QA_JP_AI_SECRET=... npm run scan -- token https://example.jp --account acct-1
 
 # Verify, then show the detailed report
 QA_JP_AI_SECRET=... npm run scan -- https://example.jp --account acct-1 --verify file
+
+# Machine-readable assessment (verified owner), and checking one
+QA_JP_AI_SECRET=... npm run scan -- https://example.jp --account acct-1 --verify file --json > assessment.json
+npm run scan -- validate assessment.json
 ```
 
 Only check sites you own or have permission to check.
@@ -81,10 +110,11 @@ Only check sites you own or have permission to check.
 This project builds on the published work of others and says so.
 
 - **[cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill)**
-  (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.) — the reference for the planned
-  repository layer: three distinct verdicts, verification by an agent that did not
-  make the finding, a coverage ledger, and machine-validated records. The URL layer
-  in this repository contains no code from it yet. When its files are incorporated,
+  (MIT, Copyright (c) 2025-2026 Cloudflare, Inc.) — the source of several ideas in
+  the judging layer: three distinct verdicts, a coverage ledger, stable
+  fingerprints, and machine-validated records. Those ideas are implemented here
+  independently; this repository contains no code or text from it. It is also the
+  reference for the planned source-code entrance. When its files are incorporated,
   they will be kept in a separate directory together with its original license.
 - **CodeRabbit** — its public descriptions of a sandboxed, evidence-filtered review
   pipeline informed the design.

@@ -1,6 +1,8 @@
 // Copyright (C) 2026 iQi
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { Grade, Severity } from '../types';
+import type { CoverageNote, CoverageStatus, NotRunReason } from '../core/coverage';
+import type { Blocker } from '../core/records';
+import type { Grade, RuleId, Severity } from '../core/types';
 
 /** All user-facing text is Japanese. Code and identifiers stay English. */
 
@@ -116,7 +118,63 @@ export const findingText: Record<string, FindingText> = {
   },
 };
 
+/** Items the outside cannot decide: handed to the owner with one precise check. */
+export const needsValidationText: Record<string, { title: string; plan: string }> = {
+  'baas.supabase_rls_unverified': {
+    title: 'Supabase の行レベルセキュリティ（RLS）が有効かどうか、外部からは確認できません',
+    plan: 'このサイトはブラウザーから Supabase に直接接続しています。ページに含まれる公開用キーは誰でも取得できるため、データを守っているのは RLS の設定だけです。Supabase の管理画面で、すべてのテーブルの RLS が有効になっていること、各ポリシーが「本人のデータのみ」などに限定されていることを確認してください。',
+  },
+  'baas.firebase_rules_unverified': {
+    title: 'Firebase のセキュリティルールが適切かどうか、外部からは確認できません',
+    plan: 'このサイトはブラウザーから Firebase に直接接続しています。Firebase コンソールで Firestore・Realtime Database・Storage のセキュリティルールを開き、「allow read, write: if true」のような全開放の設定や、テストモードのままの設定が残っていないことを確認してください。',
+  },
+};
+
+export const blockerLabel: Record<Blocker, string> = {
+  not_observable_from_outside: '外部からの検査では確認できません',
+  requires_source: 'ソースコードの検査が必要です',
+  requires_deployment_fact: '運用環境の設定を確認する必要があります',
+};
+
+export const ruleTitle: Record<RuleId, string> = {
+  R01: 'データベースのアクセス制御が有効になっていない',
+  R02: '管理者用のキーがフロントエンドに含まれている',
+  R03: '認証チェックがフロントエンドだけで行われている',
+  R04: 'ログインなしで利用者のデータを取得できる',
+  R05: '利用者が自分の権限や認証状態を書き換えられる',
+  R06: '機密ファイルが公開ストレージに置かれている',
+  R07: '回数制限・利用上限が設定されていない',
+  R08: 'インジェクション（SQL・XSS）',
+  R09: '画面上の制限がサーバー側で実施されていない',
+  R10: '依存ライブラリのリスク',
+  R11: '内部ファイル・デバッグ情報の露出',
+  R12: 'LLM が入力によって権限外の操作をさせられる',
+  R13: 'AI エージェントの権限が広すぎる・停止手段がない',
+  R14: '通信の暗号化とレスポンスヘッダー',
+  R15: 'ログの取り扱い',
+};
+
+export const coverageStatusLabel: Record<CoverageStatus, string> = {
+  checked: '検査済み',
+  partial: '一部のみ検査',
+  not_run: '未検査',
+  error: '検査できませんでした',
+};
+
+export const notRunReasonLabel: Record<NotRunReason, string> = {
+  requires_owner_verification: '所有者確認後に検査します',
+  requires_source: 'ソースコードの検査が必要なため、今後対応予定です',
+  not_implemented: '今後対応予定です',
+};
+
+export const coverageNoteLabel: Record<CoverageNote, string> = {
+  html_referenced_scripts_only: 'HTML から参照されているスクリプトのみが対象です',
+  presence_hint_only: '利用しているサービスの検出のみで、設定内容は確認していません',
+};
+
 export const evidence = {
+  directConnection: (service: string) =>
+    `ブラウザーから ${service} へ直接接続する設定を検出（設定内容は確認していません）`,
   redactedSecret: (prefix: string, length: number) =>
     `先頭「${prefix}」で始まる ${length} 文字の文字列（全体は記録していません）`,
   privateKeyHeader: () => 'PRIVATE KEY のヘッダー行を検出（鍵の本体は記録していません）',
@@ -143,6 +201,14 @@ export const report = {
   detailsGated:
     '問題の種類・場所・修正方法は、サイトの所有者であることを確認できた方にのみ表示します。',
   noFindings: '今回の検査範囲では問題は見つかりませんでした。',
+  needsValidationCount: '確認をお願いしたい項目',
+  needsValidationHeading: '■ 確認をお願いしたい項目（外部からは判定できないため、所有者の方による確認が必要です）',
+  findingsHeading: '■ 見つかった問題',
+  coverageHeading: '■ 検査範囲（全項目の一覧）',
+  coverageLine: (total: number, checked: number, partial: number) =>
+    `検査範囲: 全 ${total} 項目のうち ${checked} 項目を検査、${partial} 項目を一部検査`,
+  reason: '理由',
+  whatToCheck: '確認していただきたいこと',
   location: '場所',
   evidence: '根拠',
   fix: '修正方法',

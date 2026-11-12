@@ -1,6 +1,6 @@
 // Copyright (C) 2026 iQi
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { safeFetch, type FetchOptions } from '../net/fetcher';
+import { safeFetch, type FetchOptions } from '../url/net/fetcher';
 import { issueProof, type OwnershipProof } from './proof';
 import { tokensEqual } from './token';
 

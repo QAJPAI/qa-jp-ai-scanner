@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { closeAgents, safeFetch } from '../src/net/fetcher';
-import { isBlockedAddress } from '../src/net/guard';
+import { closeAgents, safeFetch } from '../src/url/net/fetcher';
+import { isBlockedAddress } from '../src/url/net/guard';
 import { startFixture } from './fixture';
 
 after(closeAgents);

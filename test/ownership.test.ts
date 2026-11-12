@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
-import { closeAgents } from '../src/net/fetcher';
+import { closeAgents } from '../src/url/net/fetcher';
 import { verifyByDns } from '../src/ownership/dns';
 import { confirmEmailOwnership, evaluateEmailOwnership } from '../src/ownership/email';
 import { verifyByFile, WELL_KNOWN_PATH } from '../src/ownership/file';
