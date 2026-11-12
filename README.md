@@ -29,6 +29,9 @@ Preventing a problem while the app is being written is cheaper than finding it
 afterwards. Using the file is not certification. Its effect has not been
 measured yet.
 
+The file is dedicated to the public domain under CC0 1.0, so it can be copied
+into any project, open or closed, with no conditions and no attribution.
+
 ## Results
 
 Every result has three parts, and none is shown without the others. All three
@@ -154,7 +157,10 @@ Improvements made here that are useful upstream will be offered back.
 
 Copyright (C) 2026 iQi
 
-AGPL-3.0-or-later. See `LICENSE`.
+The scanner (everything except `rules/`) is AGPL-3.0-or-later. See `LICENSE`.
+
+`rules/` is CC0-1.0: public domain, no conditions. See `rules/LICENSE`. The
+AGPL does not apply to it.
 
 Anyone may use, study, change and redistribute this checker. If you run a
 modified version as a network service, you must offer the source of that

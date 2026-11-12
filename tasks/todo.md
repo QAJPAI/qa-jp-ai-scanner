@@ -48,7 +48,7 @@
 ### Prevention first (2026-11-12)
 - [x] `rules/security-rules.ja.md` v0.1: the 15 rules as instructions for AI coding tools, with a pre-release self-check in three verdicts
 - [x] Test keeps the file and the rule registry in step
-- [ ] Decide the licence of the rules file (it is meant to be copied into anyone's project, so a permissive one)
+- [x] Licence of the rules file: CC0-1.0 (decided 2026-11-12), so it can be copied into any project with no conditions
 - [ ] Measure its effect: build the same small app with and without it, and scan both
 
 ### Open after review

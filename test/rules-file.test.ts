@@ -39,3 +39,10 @@ test('the file does not claim certification or safety', () => {
   assert.ok(file.includes('安全を保証するものでもありません'));
   assert.ok(file.includes('まだ検証していません'), 'states that its effect is not yet measured');
 });
+
+test('the rules are public domain, and say so where a reader will see it', () => {
+  assert.ok(file.includes('CC0 1.0'));
+  assert.ok(file.includes('出典の表示も要りません'));
+  const licence = readFileSync(new URL('../rules/LICENSE', import.meta.url), 'utf8');
+  assert.ok(licence.includes('CC0 1.0 Universal') || licence.includes('Creative Commons Legal Code'));
+});
