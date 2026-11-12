@@ -27,6 +27,29 @@
 - [x] `--json` and `validate` commands
 - [x] `docs/ARCHITECTURE.md`
 
+### Independent review and fixes (2026-11-12, engine 0.3.0)
+- [x] Owner scan followed cross-site redirects and probed a host the proof did not cover
+- [x] Quadratic regexes on attacker-controlled text (script discovery, Firebase detection)
+- [x] Unbounded matches: decoys crashed R02, hid a real key, exhausted memory
+- [x] Email method: subdomain mailboxes, shared hosting domains, whole-domain proof scope
+- [x] Coverage overstated: error pages graded; unread, capped, truncated or skipped scripts read as clean; unanswered probes read as absent
+- [x] Tier gate relied on an editable field; public entry point returned full detail
+- [x] Validator gaps: dates, target shape, enums, unknown fields, record mode vs ledger
+- [x] IPv6 ranges embedding IPv4 passed the guard
+- [x] Script discovery lost scripts (case folding, quoted ">", entities, <base>, tag cap)
+- [x] R11 false positives on catch-all servers; missed `.env.*` and `export KEY=`
+- [x] R14 cookie false positives, HSTS max-age=0, CSP in <meta>
+- [x] Timeouts were per hop; scan budget was only checked between requests
+- [x] Fingerprints of PEM keys and source maps changed on every build
+- [x] Public coverage view could change when an owner-only check ran
+- [x] Guard error messages revealed internal DNS results
+- [x] Tests that passed with the guard partly removed (verified by mutation)
+
+### Open after review
+- [ ] Service layer must notify the domain's admin address and log whenever details are unlocked (method A lets any mailbox holder in an organisation in)
+- [ ] Decide whether the public tier should show P0 / P1 counts at all (a non-zero P0 count tells anyone a key is in the page)
+- [ ] Run each scan in a worker with a hard timeout as a second line of defence
+
 ### Next
 - [ ] Push to GitHub under AgenticAIJP (GitHub is not connected to this session yet)
 - [ ] Entrance B, first step: local pre-deployment checks on source code (R01 access rules in migrations and rule files, R02 keys in source), using the same core
@@ -35,6 +58,13 @@
 - [ ] Legal review of the verification flow and terms before any public deployment
 - [ ] R04 "existence-only" check — define the detect/exploit boundary first
 - [ ] Discover runtime-loaded chunks (build manifests) for R02
+
+## Review (2026-11-12, engine 0.3.0)
+
+- 65 tests pass; `tsc --noEmit` clean.
+- An independent reviewer that had not seen the code being written found 15 defects. All 15 were reproduced, fixed or bounded, and given a regression test.
+- Mutation check: with each of five fixes removed in turn (hop validation, same-host probes, post-redirect proof check, all-addresses lookup check, single deadline), the suite fails.
+- Still not verified: behaviour against real deployed sites. No third-party site was scanned.
 
 ## Review (2026-11-12, engine 0.2.0)
 

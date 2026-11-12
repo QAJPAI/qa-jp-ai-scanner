@@ -18,8 +18,10 @@ import { JWT_PATTERN, jwtRole } from './secrets';
  * and hands the owner one precise thing to check: a needs_validation record.
  */
 
-const SUPABASE = /https:\/\/[a-z0-9]{15,}\.supabase\.co\b|(?<![A-Za-z0-9_-])sb_publishable_[A-Za-z0-9_-]{20,}/i;
-const FIREBASE = /\b[a-z0-9-]+\.firebaseapp\.com\b|\bfirebaseio\.com\b|\bfirestore\.googleapis\.com\b|\bfirebasestorage\.(?:googleapis\.com|app)\b/i;
+// Every quantifier here is bounded and no pattern starts with a variable-length
+// part: these run over attacker-controlled text and must stay linear.
+const SUPABASE = /https:\/\/[a-z0-9]{15,40}\.supabase\.co\b|(?<![A-Za-z0-9_-])sb_publishable_[A-Za-z0-9_-]{20}/i;
+const FIREBASE = /\bfirebaseapp\.com\b|\bfirebaseio\.com\b|\bfirestore\.googleapis\.com\b|\bfirebasestorage\.(?:googleapis\.com|app)\b/i;
 
 function usesSupabase(text: string): boolean {
   if (SUPABASE.test(text)) return true;

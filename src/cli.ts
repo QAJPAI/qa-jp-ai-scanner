@@ -4,14 +4,15 @@
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { validateAssessment } from './core/validate';
-import { ownership as ownershipText } from './i18n/ja';
+import { ownership as ownershipText, scanErrorText } from './i18n/ja';
 import { dnsRecordName, verifyByDns } from './ownership/dns';
 import { verifyByFile } from './ownership/file';
 import { ownershipSubject, type OwnershipProof } from './ownership/proof';
 import { mintVerificationToken } from './ownership/token';
-import { renderOwnerReport, renderPublicSummary, toPublicSummary } from './report';
+import { renderOwnerReport, renderPublicSummary } from './report';
 import { closeAgents } from './url/net/fetcher';
-import { normalizeTarget, scan } from './url/scan';
+import { BlockedAddressError } from './url/net/guard';
+import { normalizeTarget, ScanError, scanOwner, scanPublic } from './url/scan';
 
 const USAGE = `Usage:
   qa-scan <url>                                  Public summary (passive checks only)
@@ -115,13 +116,24 @@ async function main(): Promise<number> {
     }
   }
 
-  const assessment = await scan(target.href, { proof });
-  if (values.json) {
-    console.log(JSON.stringify(proof ? assessment : toPublicSummary(assessment), null, 2));
+  if (proof) {
+    const assessment = await scanOwner(target.href, proof);
+    console.log(values.json ? JSON.stringify(assessment, null, 2) : renderOwnerReport(assessment, proof));
   } else {
-    console.log(proof ? renderOwnerReport(assessment) : renderPublicSummary(toPublicSummary(assessment)));
+    const summary = await scanPublic(target.href);
+    console.log(values.json ? JSON.stringify(summary, null, 2) : renderPublicSummary(summary));
   }
   return 0;
+}
+
+/** What the requester is told. Internal detail (resolved addresses, stack traces) stays out. */
+function publicMessage(err: unknown): string {
+  if (err instanceof ScanError) return scanErrorText[err.code] ?? scanErrorText.generic!;
+  if (err instanceof BlockedAddressError) return scanErrorText.blocked!;
+  if (err instanceof Error && (err as { cause?: unknown }).cause instanceof BlockedAddressError) {
+    return scanErrorText.blocked!;
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 main()
@@ -131,6 +143,6 @@ main()
   })
   .catch(async (err: unknown) => {
     await closeAgents();
-    console.error(err instanceof Error ? err.message : String(err));
+    console.error(publicMessage(err));
     process.exitCode = 1;
   });

@@ -7,9 +7,14 @@ export interface Route {
   status?: number;
   headers?: Record<string, string | string[]>;
   body?: string;
+  /** Wait this long before answering. */
+  delayMs?: number;
+  /** Drop the connection without answering. */
+  destroy?: boolean;
 }
 
 export interface Fixture {
+  port: number;
   origin: string;
   /** Every path requested, in order — lets tests prove what was NOT probed. */
   requests: string[];
@@ -23,15 +28,28 @@ export async function startFixture(routes: Record<string, Route>, fallback?: Rou
     const path = (req.url ?? '/').split('?')[0]!;
     requests.push(path);
     const route = routes[path] ?? fallback ?? { status: 404, body: 'not found' };
-    res.writeHead(route.status ?? 200, { 'content-type': 'text/plain', ...route.headers });
-    res.end(route.body ?? '');
+    if (route.destroy) {
+      req.socket.destroy();
+      return;
+    }
+    const answer = () => {
+      res.writeHead(route.status ?? 200, { 'content-type': 'text/plain', ...route.headers });
+      res.end(route.body ?? '');
+    };
+    if (route.delayMs) setTimeout(answer, route.delayMs);
+    else answer();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
+    port,
     origin: `http://127.0.0.1:${port}`,
     requests,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
   };
 }
 

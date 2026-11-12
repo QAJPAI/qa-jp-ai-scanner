@@ -5,14 +5,14 @@ import { after, test } from 'node:test';
 import { summarize } from '../src/core/assessment';
 import type { Checker } from '../src/core/checker';
 import { validateAssessment } from '../src/core/validate';
-import { confirmEmailOwnership } from '../src/ownership/email';
+import { issueEmailProofAfterLinkClick } from '../src/ownership/email';
 import { verifyByFile, WELL_KNOWN_PATH } from '../src/ownership/file';
 import { PROOF_TTL_MS } from '../src/ownership/proof';
 import { mintVerificationToken } from '../src/ownership/token';
 import { renderOwnerReport, renderPublicSummary, toPublicSummary } from '../src/report';
 import type { UrlContext } from '../src/url/context';
 import { closeAgents } from '../src/url/net/fetcher';
-import { extractScriptUrls, scan, URL_CHECKERS } from '../src/url/scan';
+import { extractScriptUrls, scan, scanPublic, URL_CHECKERS } from '../src/url/scan';
 import { fake, html, startFixture } from './fixture';
 
 after(closeAgents);
@@ -81,7 +81,16 @@ test('public tier: counts only, passive requests only, nothing identifying', asy
     assert.match(text, /確認をお願いしたい項目: 1 件/);
     assert.match(text, /全 15 項目のうち 1 項目を検査、2 項目を一部検査/);
 
-    assert.throws(() => renderOwnerReport(assessment), /ownership proof/);
+    // Details need the tier AND a valid proof for this host. Editing the tier field is not enough.
+    const elsewhere = issueEmailProofAfterLinkClick('info@example.jp', 'example.jp')!;
+    const here = (await verifyByFile(site.origin, TOKEN, { allowPrivate: true }))!;
+    assert.throws(() => renderOwnerReport(assessment, here), /ownership proof/);
+    assert.throws(() => renderOwnerReport({ ...assessment, tier: 'owner' }, elsewhere), /ownership proof/);
+    assert.throws(() => renderOwnerReport({ ...assessment, tier: 'owner' }, here, Date.now() + PROOF_TTL_MS), /ownership proof/);
+
+    // The public entry point returns the summary and nothing else.
+    const direct = await scanPublic(site.origin, OPTS);
+    assert.deepEqual(Object.keys(direct).sort(), ['counts', 'coverage', 'grade', 'host', 'layer', 'needsValidation', 'rulesVersion', 'scannedAt']);
   } finally {
     await site.close();
   }
@@ -112,7 +121,7 @@ test('owner tier: file verification unlocks details and the active checks', asyn
       assert.ok(codes.includes(expected), `missing ${expected}`);
     }
 
-    const report = renderOwnerReport(assessment);
+    const report = renderOwnerReport(assessment, proof);
     assert.match(report, /service_role キーがフロントエンドに含まれています/);
     assert.match(report, /環境変数ファイル（\.env）が外部から取得できる状態です/);
     assert.match(report, /2 件の変数名を確認/);
@@ -156,7 +165,7 @@ test('fingerprints are stable across runs and ports', async () => {
 test('a proof for another site, or an expired one, is rejected', async () => {
   const site = await vulnerableSite();
   try {
-    const other = confirmEmailOwnership('info@example.jp', 'example.jp')!;
+    const other = issueEmailProofAfterLinkClick('info@example.jp', 'example.jp')!;
     await assert.rejects(scan(site.origin, { ...OPTS, proof: other }), /does not cover/);
 
     const proof = (await verifyByFile(site.origin, TOKEN, { allowPrivate: true }))!;
@@ -239,6 +248,36 @@ test('a checker that fails is recorded as an error, never as "nothing found"', a
     assert.deepEqual(validateAssessment(assessment), []);
     const summary = summarize(assessment);
     assert.equal(summary.coverage.error, 1);
+  } finally {
+    await site.close();
+  }
+});
+
+test('a slow target cannot hold a scan open: one deadline covers every request', async () => {
+  const scripts = Array.from({ length: 10 }, (_, i) => `/s${i}.js`);
+  const site = await startFixture({
+    '/': { headers: { 'content-type': 'text/html' }, body: html(scripts) },
+    ...Object.fromEntries(scripts.map((s) => [s, { body: 'console.log(1)', delayMs: 150 }])),
+    [WELL_KNOWN_PATH]: { body: TOKEN },
+  });
+  try {
+    const proof = (await verifyByFile(site.origin, TOKEN, { allowPrivate: true }))!;
+    site.requests.length = 0;
+
+    const started = performance.now();
+    const assessment = await scan(site.origin, { ...OPTS, proof, maxDurationMs: 400 });
+    const elapsed = performance.now() - started;
+
+    // 10 scripts at 150 ms each would take 1.5 s; the budget is 0.4 s.
+    assert.ok(elapsed < 1200, `scan took ${elapsed.toFixed(0)} ms`);
+    assert.ok(site.requests.length < 8, `made ${site.requests.length} requests`);
+    assert.equal(site.requests.includes('/.env'), false, 'no probe is started after the deadline');
+
+    // What was not read is reported, not passed over.
+    const r02 = assessment.coverage.find((u) => u.ruleId === 'R02')!;
+    assert.deepEqual([r02.status, r02.note], ['partial', 'some_content_not_read']);
+    assert.equal(coverageOf(assessment, 'R11').status, 'error', 'the skipped active check is not reported as clean');
+    assert.deepEqual(validateAssessment(assessment), []);
   } finally {
     await site.close();
   }

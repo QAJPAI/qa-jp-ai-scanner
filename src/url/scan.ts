@@ -6,11 +6,12 @@ import { buildLedger, type CheckerCoverage, type DeferredRule } from '../core/co
 import { dedupeByFingerprint, recordFactory, type AssessmentRecord } from '../core/records';
 import { ASSESSMENT_SCHEMA, ENGINE_VERSION, RULES_VERSION, type Tier } from '../core/types';
 import { domainInfo, proofCovers, type OwnershipProof } from '../ownership/proof';
+import { toPublicSummary, type PublicSummary } from '../report';
 import { baasHintChecker } from './checkers/baas-hint';
 import { exposedFilesChecker } from './checkers/exposed-files';
 import { secretsChecker } from './checkers/secrets';
 import { transportChecker } from './checkers/transport';
-import type { ServedText, UrlContext } from './context';
+import type { LoadStats, ServedText, UrlContext } from './context';
 import { safeFetch, type FetchOptions } from './net/fetcher';
 
 /** The URL layer's inspectors. Adding a check means adding an entry here. */
@@ -26,19 +27,101 @@ export interface ScanOptions {
   proof?: OwnershipProof;
   fetch?: FetchOptions;
   maxScripts?: number;
+  /** Wall-clock budget for all requests of one scan. A slow target cannot hold a worker for long. */
+  maxDurationMs?: number;
   now?: () => number;
   /** Override the checker set (tests, experiments). */
   checkers?: readonly Checker<UrlContext>[];
 }
 
+export type ScanErrorCode = 'page_unavailable' | 'redirected_elsewhere' | 'proof_mismatch';
+
+/** A scan that cannot honestly produce a result. Reported to the requester by code. */
+export class ScanError extends Error {
+  constructor(
+    readonly code: ScanErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ScanError';
+  }
+}
+
 const SCRIPT_MAX_BYTES = 3 * 1024 * 1024;
 const DEFAULT_MAX_SCRIPTS = 20;
+const DEFAULT_MAX_DURATION_MS = 60_000;
+const MAX_INPUT_LENGTH = 2048;
+const MAX_TAGS = 2000;
+const MAX_TAG_LENGTH = 4096;
 
-const SCRIPT_SRC = /<script\b[^>]*?\bsrc\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
-const MODULE_PRELOAD = /<link\b(?=[^>]*\brel\s*=\s*["']?modulepreload)[^>]*?\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
+// The attribute name must stand alone: `src`, not `data-src`.
+const attr = (name: string) =>
+  new RegExp(`(?<=[\\s"'/])${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i');
+const SRC = attr('src');
+const HREF = attr('href');
+const REL = attr('rel');
+
+const ENTITIES: Record<string, string> = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
+
+/** Decode the few character references that occur in URLs. */
+function decodeEntities(value: string): string {
+  return value.replace(/&(?:(amp|quot|apos|lt|gt)|#(\d{1,6})|#x([0-9a-f]{1,5}));/gi, (whole, named, dec, hex) => {
+    if (named) return ENTITIES[String(named).toLowerCase()] ?? whole;
+    const code = dec ? Number(dec) : parseInt(String(hex), 16);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+  });
+}
+
+function attrValue(tag: string, pattern: RegExp): string | undefined {
+  const m = pattern.exec(tag);
+  const raw = m ? (m[1] ?? m[2] ?? m[3]) : undefined;
+  return raw === undefined ? undefined : decodeEntities(raw.trim());
+}
+
+/** Index of the `>` that closes a tag, ignoring any `>` inside a quoted attribute value. */
+function tagEnd(window: string): number {
+  let quote = 0;
+  for (let i = 0; i < window.length; i++) {
+    const c = window.charCodeAt(i);
+    if (quote) {
+      if (c === quote) quote = 0;
+    } else if (c === 0x22 || c === 0x27) {
+      quote = c;
+    } else if (c === 0x3e) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Opening tags of one element, found by a linear scan.
+ *
+ * The page is attacker-controlled, so this must not be one regex over the
+ * whole document: a pattern like /<script[^>]*src=/ takes quadratic time on a
+ * page made of unterminated tags. The tag name is found with a fixed-string
+ * search, each tag is cut to a bounded window, and the number of candidates
+ * examined is capped (and reported when hit).
+ */
+function openingTags(html: string, name: string): { tags: string[]; limitHit: boolean } {
+  const start = new RegExp(`<${name}(?=[\\s/>])`, 'gi');
+  const tags: string[] = [];
+  let examined = 0;
+  for (let m = start.exec(html); m; m = start.exec(html)) {
+    if (examined >= MAX_TAGS) return { tags, limitHit: true };
+    examined++;
+    const window = html.slice(m.index, m.index + MAX_TAG_LENGTH);
+    const end = tagEnd(window);
+    if (end >= 0) tags.push(window.slice(0, end));
+  }
+  return { tags, limitHit: false };
+}
 
 export function normalizeTarget(input: string): URL {
   const trimmed = input.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_INPUT_LENGTH) {
+    throw new Error('URL is empty or too long');
+  }
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   const url = new URL(withScheme);
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
@@ -54,26 +137,50 @@ function sameSite(a: URL, b: URL): boolean {
   return da !== null && da === domainInfo(b.hostname).registrable;
 }
 
-/** Script URLs the page itself tells every browser to load. */
-export function extractScriptUrls(html: string, pageUrl: URL): string[] {
-  const urls = new Set<string>();
-  for (const pattern of [SCRIPT_SRC, MODULE_PRELOAD]) {
-    pattern.lastIndex = 0;
-    for (const m of html.matchAll(pattern)) {
-      const raw = m[1] ?? m[2] ?? m[3];
-      if (!raw) continue;
-      try {
-        const resolved = new URL(raw, pageUrl);
-        if ((resolved.protocol === 'http:' || resolved.protocol === 'https:') && sameSite(resolved, pageUrl)) {
-          urls.add(resolved.href);
-        }
-      } catch {
-        // malformed src: skip
-      }
+/** Same-site script URLs the page itself tells every browser to load. */
+export function discoverScripts(html: string, pageUrl: URL): { urls: string[]; tagLimitHit: boolean } {
+  const scripts = openingTags(html, 'script');
+  const links = openingTags(html, 'link');
+  const bases = openingTags(html, 'base');
+
+  // <base href> changes what relative URLs mean.
+  let base = pageUrl;
+  const baseHref = bases.tags.map((tag) => attrValue(tag, HREF)).find((v) => v);
+  if (baseHref) {
+    try {
+      base = new URL(baseHref, pageUrl);
+    } catch {
+      // malformed base: ignore it
     }
   }
-  return [...urls];
+
+  const raw: string[] = [];
+  for (const tag of scripts.tags) {
+    const src = attrValue(tag, SRC);
+    if (src) raw.push(src);
+  }
+  for (const tag of links.tags) {
+    if (attrValue(tag, REL)?.toLowerCase().includes('modulepreload')) {
+      const href = attrValue(tag, HREF);
+      if (href) raw.push(href);
+    }
+  }
+
+  const urls = new Set<string>();
+  for (const value of raw) {
+    try {
+      const resolved = new URL(value, base);
+      if ((resolved.protocol === 'http:' || resolved.protocol === 'https:') && sameSite(resolved, pageUrl)) {
+        urls.add(resolved.href);
+      }
+    } catch {
+      // malformed src: skip
+    }
+  }
+  return { urls: [...urls], tagLimitHit: scripts.limitHit || links.limitHit };
 }
+
+export const extractScriptUrls = (html: string, pageUrl: URL): string[] => discoverScripts(html, pageUrl).urls;
 
 async function httpRedirectsToHttps(host: string, options: FetchOptions): Promise<boolean | undefined> {
   try {
@@ -84,18 +191,58 @@ async function httpRedirectsToHttps(host: string, options: FetchOptions): Promis
   }
 }
 
-/** The requests a browser makes when opening the page — nothing more. */
-async function loadContext(target: URL, fetchOptions: FetchOptions, maxScripts: number): Promise<UrlContext> {
+/**
+ * The requests a browser makes when opening the page, plus one request to the
+ * http:// address of an https site to see whether it redirects. Nothing more.
+ */
+async function loadContext(
+  target: URL,
+  fetchOptions: FetchOptions,
+  maxScripts: number,
+  outOfTime: () => boolean,
+): Promise<UrlContext> {
   const page = await safeFetch(target.href, fetchOptions);
   const finalUrl = new URL(page.finalUrl);
 
+  // A result is about one site. If the address hands the visitor to a different
+  // site, grading that site under this name — or probing it with this site's
+  // ownership proof — would be wrong.
+  if (!sameSite(target, finalUrl)) {
+    throw new ScanError('redirected_elsewhere', `The address redirects to another site (${finalUrl.hostname})`);
+  }
+  // An error page is not the site: do not grade it.
+  if (page.status < 200 || page.status >= 300) {
+    throw new ScanError('page_unavailable', `The page answered with status ${page.status}`);
+  }
+
+  const found = discoverScripts(page.body, finalUrl);
+  const load: LoadStats = {
+    pageTruncated: page.truncated,
+    tagLimitHit: found.tagLimitHit,
+    scriptsFound: found.urls.length,
+    scriptsRead: 0,
+    scriptsFailed: 0,
+    scriptsTruncated: 0,
+    scriptsSkipped: Math.max(0, found.urls.length - maxScripts),
+  };
+
   const scripts: ServedText[] = [];
-  for (const url of extractScriptUrls(page.body, finalUrl).slice(0, maxScripts)) {
+  for (const url of found.urls.slice(0, maxScripts)) {
+    if (outOfTime()) {
+      load.scriptsSkipped++;
+      continue;
+    }
     try {
       const res = await safeFetch(url, { ...fetchOptions, maxBytes: SCRIPT_MAX_BYTES });
-      if (res.status === 200) scripts.push({ url: res.finalUrl, body: res.body });
+      if (res.status !== 200) {
+        load.scriptsFailed++;
+        continue;
+      }
+      scripts.push({ url: res.finalUrl, body: res.body });
+      load.scriptsRead++;
+      if (res.truncated) load.scriptsTruncated++;
     } catch {
-      // an unreachable script is not a finding
+      load.scriptsFailed++;
     }
   }
 
@@ -104,12 +251,23 @@ async function loadContext(target: URL, fetchOptions: FetchOptions, maxScripts: 
     finalUrl,
     scripts,
     texts: [{ url: page.finalUrl, body: page.body }, ...scripts],
+    load,
     httpRedirectsToHttps:
-      finalUrl.protocol === 'https:' ? await httpRedirectsToHttps(finalUrl.host, fetchOptions) : undefined,
+      finalUrl.protocol === 'https:' && !outOfTime()
+        ? await httpRedirectsToHttps(finalUrl.host, fetchOptions)
+        : undefined,
     fetch: fetchOptions,
+    outOfTime,
   };
 }
 
+/**
+ * Run a scan and return the full assessment.
+ *
+ * The returned object holds every detail, at either tier. A service must not
+ * hand it to an unverified requester: use scanPublic() for that. This function
+ * is for the owner path, for tests, and for tools that post-process results.
+ */
 export async function scan(input: string, options: ScanOptions = {}): Promise<Assessment> {
   const now = options.now ?? Date.now;
   const target = normalizeTarget(input);
@@ -117,12 +275,24 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
   let tier: Tier = 'public';
   if (options.proof) {
     if (!proofCovers(options.proof, target.hostname, now())) {
-      throw new Error('Ownership proof does not cover this host or has expired');
+      throw new ScanError('proof_mismatch', 'Ownership proof does not cover this host or has expired');
     }
     tier = 'owner';
   }
 
-  const ctx = await loadContext(target, options.fetch ?? {}, options.maxScripts ?? DEFAULT_MAX_SCRIPTS);
+  const startedMs = Date.now();
+  const budgetMs = options.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
+  const outOfTime = () => Date.now() - startedMs >= budgetMs;
+  // Every request of this scan, including active probes, shares one deadline.
+  const fetchOptions: FetchOptions = { ...options.fetch, deadlineAt: startedMs + Math.max(budgetMs, 1) };
+
+  const ctx = await loadContext(target, fetchOptions, options.maxScripts ?? DEFAULT_MAX_SCRIPTS, outOfTime);
+
+  // The proof must cover the host that was actually reached, not only the one
+  // that was typed: example.jp may answer as www.example.jp.
+  if (options.proof && !proofCovers(options.proof, ctx.finalUrl.hostname, now())) {
+    throw new ScanError('proof_mismatch', 'Ownership proof does not cover the host this address leads to');
+  }
 
   const records: AssessmentRecord[] = [];
   const ran: CheckerCoverage[] = [];
@@ -135,8 +305,10 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
       continue;
     }
     try {
+      // Out of time before an active check could start: say so rather than skip silently.
+      if (checker.mode === 'active' && outOfTime()) throw new Error('scan time budget exhausted');
       const outcome = await checker.run(ctx, recordFactory(checker.id, checker.layer, checker.mode));
-      records.push(...outcome.records);
+      for (const record of outcome.records) records.push(record);
       ran.push({ checker: checker.id, mode: checker.mode, reports: outcome.coverage });
     } catch {
       // A failed check is recorded as such; it must never read as "nothing found".
@@ -152,10 +324,27 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
     schema: ASSESSMENT_SCHEMA,
     engineVersion: ENGINE_VERSION,
     rulesVersion: RULES_VERSION,
-    target: { layer: 'url', host: target.hostname },
+    target: { layer: 'url', host: ctx.finalUrl.hostname },
     tier,
     startedAt: new Date(now()).toISOString(),
     records: dedupeByFingerprint(records),
     coverage: buildLedger('url', ran, deferred),
   };
+}
+
+/**
+ * The entry point for an unverified requester. Only the summary leaves this
+ * function: no record, location or evidence exists in what it returns.
+ */
+export async function scanPublic(input: string, options: Omit<ScanOptions, 'proof'> = {}): Promise<PublicSummary> {
+  return toPublicSummary(await scan(input, { ...options, proof: undefined }));
+}
+
+/** The entry point for a verified owner. A proof is required, not optional. */
+export async function scanOwner(
+  input: string,
+  proof: OwnershipProof,
+  options: Omit<ScanOptions, 'proof'> = {},
+): Promise<Assessment> {
+  return scan(input, { ...options, proof });
 }

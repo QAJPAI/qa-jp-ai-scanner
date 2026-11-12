@@ -170,6 +170,19 @@ export const notRunReasonLabel: Record<NotRunReason, string> = {
 export const coverageNoteLabel: Record<CoverageNote, string> = {
   html_referenced_scripts_only: 'HTML から参照されているスクリプトのみが対象です',
   presence_hint_only: '利用しているサービスの検出のみで、設定内容は確認していません',
+  some_content_not_read: '一部のスクリプトを読み込めなかったため、その部分は検査していません',
+  record_limit_reached: '該当箇所が多すぎるため、途中で検査を打ち切りました',
+  some_probes_failed: '一部の確認に応答がなかったため、その部分は判定していません',
+};
+
+/** Shown to the requester when a scan cannot honestly produce a result. */
+export const scanErrorText: Record<string, string> = {
+  page_unavailable: 'ページを正常に取得できなかったため、検査を行いませんでした。URL をご確認ください。',
+  redirected_elsewhere:
+    'この URL は別のサイトへ転送されます。検査したいサイトの URL を直接入力してください。',
+  proof_mismatch: '所有者確認の対象と、検査するサイトが一致しません。',
+  blocked: 'この URL は検査できません。',
+  generic: '検査中に問題が発生しました。時間をおいて再度お試しください。',
 };
 
 export const evidence = {
@@ -202,6 +215,8 @@ export const report = {
     '問題の種類・場所・修正方法は、サイトの所有者であることを確認できた方にのみ表示します。',
   noFindings: '今回の検査範囲では問題は見つかりませんでした。',
   needsValidationCount: '確認をお願いしたい項目',
+  incomplete: (count: number) =>
+    `※ ${count} 項目の検査が完了しなかったため、この評価は不完全です。`,
   needsValidationHeading: '■ 確認をお願いしたい項目（外部からは判定できないため、所有者の方による確認が必要です）',
   findingsHeading: '■ 見つかった問題',
   coverageHeading: '■ 検査範囲（全項目の一覧）',
@@ -237,6 +252,8 @@ export const ownership = {
     invalid: 'メールアドレスの形式が正しくありません。',
     domain_mismatch:
       'メールアドレスのドメインが、検査対象のサイトのドメインと一致しません。',
+    mailbox_not_on_main_domain:
+      'サイトのドメインそのもののメールアドレス（例：info@example.jp）が必要です。サブドメインのメールアドレスでは確認できません。「確認ファイルを置く方法」もご利用いただけます。',
     free_mail:
       'フリーメールや携帯キャリアのメールアドレスでは所有者確認ができません。「確認ファイルを置く方法」をご利用ください。',
     platform_subdomain:

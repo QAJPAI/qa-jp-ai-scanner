@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { closeAgents } from '../src/url/net/fetcher';
 import { verifyByDns } from '../src/ownership/dns';
-import { confirmEmailOwnership, evaluateEmailOwnership } from '../src/ownership/email';
+import { evaluateEmailOwnership, issueEmailProofAfterLinkClick } from '../src/ownership/email';
 import { verifyByFile, WELL_KNOWN_PATH } from '../src/ownership/file';
 import { ownershipSubject, proofCovers, PROOF_TTL_MS } from '../src/ownership/proof';
 import { mintVerificationToken } from '../src/ownership/token';
@@ -21,7 +21,7 @@ const decide = (email: string, host: string) => {
 
 test('email: same registrable domain is accepted', () => {
   assert.equal(decide('info@example.co.jp', 'www.example.co.jp'), 'eligible');
-  assert.equal(decide('Info@Mail.Example.co.jp', 'app.example.co.jp'), 'eligible');
+  assert.equal(decide('Info@Example.co.jp', 'app.example.co.jp'), 'eligible');
   assert.equal(decide('owner@clinic-example.jp', 'clinic-example.jp'), 'eligible');
 });
 
@@ -35,9 +35,9 @@ test('email: the three holes are closed', () => {
   assert.equal(decide('someone@softbank.ne.jp', 'example.jp'), 'free_mail');
   assert.equal(decide('someone@abc.ocn.ne.jp', 'example.jp'), 'free_mail');
   // 3. large shared organisations: admin mailboxes only
-  assert.equal(decide('student@g.example-univ.ac.jp', 'circle.example-univ.ac.jp'), 'admin_only');
+  assert.equal(decide('student@example-univ.ac.jp', 'circle.example-univ.ac.jp'), 'admin_only');
   assert.equal(decide('webmaster@example-univ.ac.jp', 'circle.example-univ.ac.jp'), 'eligible');
-  assert.equal(decide('staff@city.example.lg.jp', 'city.example.lg.jp'), 'admin_only');
+  assert.equal(decide('staff@example.lg.jp', 'www.example.lg.jp'), 'admin_only');
   assert.equal(decide('someone@example.edu', 'lab.example.edu'), 'admin_only');
 });
 
@@ -49,16 +49,32 @@ test('email: other rejections', () => {
   assert.equal(decide('info@example.jp', '192.0.2.10'), 'ip_address');
 });
 
-test('email proof covers the domain and its subdomains, and expires', () => {
+test('email: a mailbox on a subdomain cannot speak for the domain', () => {
+  // A provider that gives each customer a mail subdomain: one customer must not unlock another's site.
+  assert.equal(decide('customer123@ma.example-isp.ne.jp', 'www.example-isp.ne.jp'), 'mailbox_not_on_main_domain');
+  assert.equal(decide('info@mail.example.co.jp', 'app.example.co.jp'), 'mailbox_not_on_main_domain');
+  assert.equal(decide('student@g.example-univ.ac.jp', 'circle.example-univ.ac.jp'), 'mailbox_not_on_main_domain');
+});
+
+test('email: shared hosting and more free-mail providers are refused', () => {
+  for (const host of ['shop1.xsrv.jp', 'myshop.thebase.in', 'clinic.studio.site', 'team.kintone.com', 'app.glitch.me']) {
+    assert.equal(decide('owner@' + host.split('.').slice(1).join('.'), host), 'platform_subdomain', host);
+  }
+  for (const mail of ['a@fastmail.com', 'a@yandex.com', 'a@gmx.net', 'a@yahoo.ne.jp', 'a@outlook.co.jp']) {
+    assert.equal(decide(mail, mail.split('@')[1]!), 'free_mail', mail);
+  }
+});
+
+test('email proof covers only the host that was asked for, and expires', () => {
   const now = 1_000_000;
-  const proof = confirmEmailOwnership('info@example.jp', 'www.example.jp', now)!;
+  const proof = issueEmailProofAfterLinkClick('info@example.jp', 'www.example.jp', now)!;
   assert.ok(proof);
-  assert.equal(proofCovers(proof, 'example.jp', now), true);
-  assert.equal(proofCovers(proof, 'app.example.jp', now), true);
-  assert.equal(proofCovers(proof, 'evilexample.jp', now), false);
-  assert.equal(proofCovers(proof, 'example.jp.attacker.com', now), false);
-  assert.equal(proofCovers(proof, 'example.jp', now + PROOF_TTL_MS), false);
-  assert.equal(confirmEmailOwnership('someone@gmail.com', 'example.jp'), undefined);
+  assert.equal(proofCovers(proof, 'www.example.jp', now), true);
+  assert.equal(proofCovers(proof, 'example.jp', now), false);
+  assert.equal(proofCovers(proof, 'payments.example.jp', now), false);
+  assert.equal(proofCovers(proof, 'www.example.jp.attacker.com', now), false);
+  assert.equal(proofCovers(proof, 'www.example.jp', now + PROOF_TTL_MS), false);
+  assert.equal(issueEmailProofAfterLinkClick('someone@gmail.com', 'example.jp'), undefined);
 });
 
 test('token is deterministic and bound to account and subject', () => {

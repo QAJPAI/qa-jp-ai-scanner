@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { dedupeByFingerprint, recordFactory } from '../src/core/records';
-import { scanTextForSecrets } from '../src/url/checkers/secrets';
+import { newSecretScanState, scanTextForSecrets } from '../src/url/checkers/secrets';
 import { checkTransport } from '../src/url/checkers/transport';
 import { fake } from './fixture';
 
@@ -35,11 +35,20 @@ test('R02 ignores keys that are public by design and look-alikes', () => {
 
 test('R02: the same key in several places is one issue; nothing reveals the key', () => {
   const key = fake.stripeLive();
-  const records = [
-    ...scanTextForSecrets('https://example.jp/a.js', `x="${key}";y="${key}"`, make),
-    ...scanTextForSecrets('https://example.jp/b.js', `z="${key}"`, make),
+  // Within one scan (shared state) the key is reported once, wherever it appears.
+  const state = newSecretScanState();
+  const inScan = [
+    ...scanTextForSecrets('https://example.jp/a.js', `x="${key}";y="${key}"`, make, state),
+    ...scanTextForSecrets('https://example.jp/b.js', `z="${key}"`, make, state),
   ];
-  assert.equal(records.length, 3);
+  assert.equal(inScan.length, 1);
+
+  // Across separate scans the fingerprint is the same, whatever the file.
+  const records = [
+    ...scanTextForSecrets('https://example.jp/a.js', `x="${key}"`, make),
+    ...scanTextForSecrets('https://example.jp/other/b.js', `padding;z="${key}"`, make),
+  ];
+  assert.equal(records.length, 2);
   assert.equal(new Set(records.map((r) => r.fingerprint)).size, 1);
   assert.equal(dedupeByFingerprint(records).length, 1);
 

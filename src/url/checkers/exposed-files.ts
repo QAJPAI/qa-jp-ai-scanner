@@ -1,6 +1,8 @@
 // Copyright (C) 2026 iQi
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { randomBytes } from 'node:crypto';
 import type { Checker } from '../../core/checker';
+import type { CoverageReport } from '../../core/coverage';
 import type { ConfirmedRecord } from '../../core/records';
 import { evidence } from '../../i18n/ja';
 import type { UrlContext } from '../context';
@@ -15,11 +17,14 @@ import { safeFetch, type FetchOptions } from '../net/fetcher';
  * and a count. File contents are never stored or reported.
  */
 
-const PROBE_BYTES = 4096;
+const PROBE_BYTES = 8192;
 const MAX_SOURCEMAPS = 5;
 
+const ENV_PATHS = ['/.env', '/.env.local', '/.env.production'];
 const SOURCEMAP_COMMENT = /\/\/[#@]\s*sourceMappingURL=([^\s'"]+)\s*$/;
-const ENV_LINE = /^[A-Za-z_][A-Za-z0-9_]*\s*=/gm;
+const ENV_LINE = /^(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=/gm;
+/** Build tools put a content hash in asset names; it changes on every build. */
+const ASSET_HASH = /[-.][A-Za-z0-9_]{6,}(?=\.(?:m?js|css)\.map$)/;
 
 interface Probe {
   status: number;
@@ -27,6 +32,7 @@ interface Probe {
   body: string;
 }
 
+/** undefined = the question could not be asked (network error, timeout). */
 async function probe(url: string, options: FetchOptions): Promise<Probe | undefined> {
   try {
     const res = await safeFetch(url, { ...options, maxBytes: PROBE_BYTES, sameHostRedirectsOnly: true });
@@ -36,7 +42,7 @@ async function probe(url: string, options: FetchOptions): Promise<Probe | undefi
       body: res.body,
     };
   } catch {
-    return undefined; // unreachable is not a finding
+    return undefined;
   }
 }
 
@@ -53,10 +59,26 @@ export const exposedFilesChecker: Checker<UrlContext> = {
   async run(ctx, make) {
     const origin = ctx.finalUrl.origin;
     const records: ConfirmedRecord[] = [];
+    let asked = 0;
+    let unanswered = 0;
 
-    const envUrl = new URL('/.env', origin);
-    const env = await probe(envUrl.href, ctx.fetch);
-    if (env && env.status === 200 && !looksLikeHtml(env)) {
+    const ask = async (url: string): Promise<Probe | undefined> => {
+      asked++;
+      const result = ctx.outOfTime() ? undefined : await probe(url, ctx.fetch);
+      if (!result) unanswered++;
+      return result;
+    };
+
+    // A server that answers every path the same way exposes nothing by doing so.
+    // Ask for a path that cannot exist and discard any probe that gets the same answer.
+    const control = await ask(new URL(`/.qa-jp-ai-control-${randomBytes(8).toString('hex')}`, origin).href);
+    const real = (p: Probe | undefined): p is Probe =>
+      p !== undefined && p.status === 200 && !looksLikeHtml(p) && !(control?.status === 200 && control.body === p.body);
+
+    for (const path of ENV_PATHS) {
+      const url = new URL(path, origin);
+      const env = await ask(url.href);
+      if (!real(env)) continue;
       const keyCount = env.body.match(ENV_LINE)?.length ?? 0;
       if (keyCount > 0) {
         records.push(
@@ -64,8 +86,8 @@ export const exposedFilesChecker: Checker<UrlContext> = {
             ruleId: 'R11',
             code: 'exposed.env',
             severity: 'P0', // keys in the file must be treated as leaked: same impact as R02
-            key: envUrl.pathname,
-            location: envUrl.href,
+            key: url.pathname,
+            location: url.href,
             evidence: evidence.envExposed(keyCount),
           }),
         );
@@ -73,8 +95,8 @@ export const exposedFilesChecker: Checker<UrlContext> = {
     }
 
     const gitUrl = new URL('/.git/HEAD', origin);
-    const git = await probe(gitUrl.href, ctx.fetch);
-    if (git && git.status === 200 && !looksLikeHtml(git)) {
+    const git = await ask(gitUrl.href);
+    if (real(git)) {
       const head = git.body.trim();
       if (head.startsWith('ref: refs/') || /^[0-9a-f]{40}$/.test(head)) {
         records.push(
@@ -105,14 +127,15 @@ export const exposedFilesChecker: Checker<UrlContext> = {
       if (mapUrl.hostname !== ctx.finalUrl.hostname) continue;
       checked++;
 
-      const map = await probe(mapUrl.href, ctx.fetch);
-      if (map && map.status === 200 && map.body.trimStart().startsWith('{') && map.body.includes('"version"')) {
+      const map = await ask(mapUrl.href);
+      // A real source map is a JSON object with a numeric version and a mappings field.
+      if (real(map) && map.body.trimStart().startsWith('{') && /"version"\s*:\s*\d/.test(map.body) && map.body.includes('"mappings"')) {
         records.push(
           make.confirmed({
             ruleId: 'R11',
             code: 'exposed.sourcemap',
             severity: 'P2',
-            key: mapUrl.pathname,
+            key: mapUrl.pathname.replace(ASSET_HASH, ''),
             location: mapUrl.href,
             evidence: evidence.sourcemapExposed(),
           }),
@@ -120,6 +143,13 @@ export const exposedFilesChecker: Checker<UrlContext> = {
       }
     }
 
-    return { records, coverage: [{ ruleId: 'R11', status: 'checked' }] };
+    // "Could not ask" is not "not there".
+    const coverage: CoverageReport =
+      unanswered === 0
+        ? { ruleId: 'R11', status: 'checked' }
+        : unanswered === asked
+          ? { ruleId: 'R11', status: 'error' }
+          : { ruleId: 'R11', status: 'partial', note: 'some_probes_failed' };
+    return { records, coverage: [coverage] };
   },
 };

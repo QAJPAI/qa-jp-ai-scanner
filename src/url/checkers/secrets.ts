@@ -5,7 +5,7 @@ import type { Checker } from '../../core/checker';
 import type { ConfirmedRecord, RecordFactory } from '../../core/records';
 import type { Severity } from '../../core/types';
 import { evidence } from '../../i18n/ja';
-import type { UrlContext } from '../context';
+import { everythingRead, type UrlContext } from '../context';
 
 /**
  * R02 — privileged keys shipped to the browser.
@@ -93,25 +93,64 @@ const DETECTORS: Detector[] = [
  */
 const keyIdentity = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 16);
 
-/** Scan one served text (HTML or a script) for privileged keys. */
-export function scanTextForSecrets(sourceUrl: string, text: string, make: RecordFactory): ConfirmedRecord[] {
+/**
+ * A PEM header has no key material in the match itself. Identify the key by
+ * the start of its body instead — not by file name or byte offset, which
+ * change on every build.
+ */
+function pemIdentity(text: string, afterHeader: number): string {
+  const body = text
+    .slice(afterHeader, afterHeader + 256)
+    .replace(/\\[nr]/g, '')
+    .replace(/[^A-Za-z0-9+/=]/g, '')
+    .slice(0, 48);
+  return body.length >= 16 ? keyIdentity(body) : 'pem-header-only';
+}
+
+/** Upper bound on distinct keys reported per scan. Bounds memory against a page full of decoys. */
+export const MAX_SECRET_RECORDS = 100;
+
+export interface SecretScanState {
+  /** Fingerprints already reported in this scan. */
+  seen: Set<string>;
+  /** Set when the cap was reached and matching stopped early. */
+  limitHit: boolean;
+}
+
+export const newSecretScanState = (): SecretScanState => ({ seen: new Set(), limitHit: false });
+
+/**
+ * Scan one served text (HTML or a script) for privileged keys. Each distinct
+ * key is reported once per scan; matching stops at MAX_SECRET_RECORDS.
+ */
+export function scanTextForSecrets(
+  sourceUrl: string,
+  text: string,
+  make: RecordFactory,
+  state: SecretScanState = newSecretScanState(),
+): ConfirmedRecord[] {
   const found: ConfirmedRecord[] = [];
   for (const detector of DETECTORS) {
     detector.pattern.lastIndex = 0;
     for (const match of text.matchAll(detector.pattern)) {
+      if (state.seen.size >= MAX_SECRET_RECORDS) {
+        state.limitHit = true;
+        return found;
+      }
       const value = match[0];
       if (detector.accept && !detector.accept(value)) continue;
-      found.push(
-        make.confirmed({
-          ruleId: 'R02',
-          code: detector.code,
-          severity: detector.severity,
-          // A PEM header carries no key material to identify it by: use its place.
-          key: detector.describe ? `${new URL(sourceUrl).pathname}#${match.index}` : keyIdentity(value),
-          location: `${sourceUrl} (offset ${match.index})`,
-          evidence: detector.describe ? detector.describe(value) : redact(value),
-        }),
-      );
+
+      const record = make.confirmed({
+        ruleId: 'R02',
+        code: detector.code,
+        severity: detector.severity,
+        key: detector.describe ? pemIdentity(text, match.index + value.length) : keyIdentity(value),
+        location: `${sourceUrl} (offset ${match.index})`,
+        evidence: detector.describe ? detector.describe(value) : redact(value),
+      });
+      if (state.seen.has(record.fingerprint)) continue;
+      state.seen.add(record.fingerprint);
+      found.push(record);
     }
   }
   return found;
@@ -123,10 +162,18 @@ export const secretsChecker: Checker<UrlContext> = {
   mode: 'passive',
   rules: ['R02'],
   run(ctx, make) {
-    return {
-      records: ctx.texts.flatMap((t) => scanTextForSecrets(t.url, t.body, make)),
-      // Code loaded later at runtime is not seen: say so in the ledger.
-      coverage: [{ ruleId: 'R02', status: 'partial', note: 'html_referenced_scripts_only' }],
-    };
+    const state = newSecretScanState();
+    const records: ConfirmedRecord[] = [];
+    for (const text of ctx.texts) {
+      for (const record of scanTextForSecrets(text.url, text.body, make, state)) records.push(record);
+      if (state.limitHit) break;
+    }
+    // Never "checked": code loaded later at runtime is not seen. Say which limit applied.
+    const note = state.limitHit
+      ? 'record_limit_reached'
+      : everythingRead(ctx.load)
+        ? 'html_referenced_scripts_only'
+        : 'some_content_not_read';
+    return { records, coverage: [{ ruleId: 'R02', status: 'partial', note }] };
   },
 };

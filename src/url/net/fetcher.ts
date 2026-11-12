@@ -4,16 +4,24 @@ import { Agent, request } from 'undici';
 import { isIP } from 'node:net';
 import { BlockedAddressError, guardedLookup, isBlockedAddress } from './guard';
 
-export const USER_AGENT = 'QA.JP.AI-Scanner/0.1 (+https://qa.jp.ai)';
+export const USER_AGENT = 'QA.JP.AI-Scanner/0.3 (+https://qa.jp.ai)';
 
 export interface FetchOptions {
-  /** Tests only: allow loopback/private targets and non-standard ports. */
+  /** Tests only: allow loopback/private targets and non-standard ports, unguarded. */
   allowPrivate?: boolean;
+  /**
+   * Tests only: permit exactly this literal host and port and keep every other
+   * guard active, so the guarded path itself can be exercised against a fixture.
+   */
+  allowOnly?: { host: string; port: number };
   maxBytes?: number;
+  /** Per-hop limit for headers and for gaps in the body. */
   timeoutMs?: number;
   maxRedirects?: number;
   /** Refuse redirects that leave the original hostname. */
   sameHostRedirectsOnly?: boolean;
+  /** Absolute time (epoch ms) after which no request may still be running. */
+  deadlineAt?: number;
 }
 
 export interface FetchResult {
@@ -56,22 +64,25 @@ export async function closeAgents(): Promise<void> {
   openAgent = undefined;
 }
 
-function assertAllowedUrl(url: URL, allowPrivate: boolean): void {
+/** Applied to the first URL and to every redirect target. */
+export function assertAllowedUrl(url: URL, options: Pick<FetchOptions, 'allowPrivate' | 'allowOnly'>): void {
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new BlockedAddressError(`Unsupported protocol: ${url.protocol}`);
+    throw new BlockedAddressError(`unsupported protocol ${url.protocol}`);
   }
   if (url.username || url.password) {
-    throw new BlockedAddressError('URLs with credentials are not accepted');
+    throw new BlockedAddressError('URL carries credentials');
   }
-  if (allowPrivate) return;
+  if (options.allowPrivate) return;
+
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  if (options.allowOnly && host === options.allowOnly.host && url.port === String(options.allowOnly.port)) return;
 
   if (url.port !== '' && url.port !== '80' && url.port !== '443') {
-    throw new BlockedAddressError(`Port ${url.port} is not allowed`);
+    throw new BlockedAddressError(`port ${url.port} is not allowed`);
   }
-  const host = url.hostname.replace(/^\[|\]$/g, '');
   // IP literals never reach the DNS lookup hook, so check them here.
   if (isIP(host) !== 0 && isBlockedAddress(host)) {
-    throw new BlockedAddressError('Target is a non-public address');
+    throw new BlockedAddressError('target is a non-public address');
   }
 }
 
@@ -85,8 +96,10 @@ function normalizeHeaders(raw: Record<string, string | string[] | undefined>): R
 }
 
 /**
- * GET a URL with SSRF protection, a response-size cap, a timeout, and
- * manually followed redirects (each hop is re-validated).
+ * GET a URL with SSRF protection, a response-size cap, and manually followed
+ * redirects (each hop is re-validated). One deadline covers the whole call —
+ * every redirect and the body together — so a server cannot stretch a request
+ * by answering each hop just inside the per-hop timeout.
  */
 export async function safeFetch(input: string, options: FetchOptions = {}): Promise<FetchResult> {
   const allowPrivate = options.allowPrivate ?? false;
@@ -94,12 +107,17 @@ export async function safeFetch(input: string, options: FetchOptions = {}): Prom
   const timeoutMs = options.timeoutMs ?? DEFAULTS.timeoutMs;
   const maxRedirects = options.maxRedirects ?? DEFAULTS.maxRedirects;
 
+  const remaining = options.deadlineAt === undefined ? Infinity : options.deadlineAt - Date.now();
+  const overallMs = Math.min(timeoutMs * 2, remaining);
+  if (overallMs <= 0) throw new Error('Time budget exhausted');
+  const signal = AbortSignal.timeout(overallMs);
+
   const first = new URL(input);
   let current = first;
   const redirectChain: string[] = [];
 
   for (let hop = 0; ; hop++) {
-    assertAllowedUrl(current, allowPrivate);
+    assertAllowedUrl(current, options);
 
     const res = await request(current, {
       method: 'GET',
@@ -107,7 +125,7 @@ export async function safeFetch(input: string, options: FetchOptions = {}): Prom
       headers: { 'user-agent': USER_AGENT, accept: '*/*' },
       headersTimeout: timeoutMs,
       bodyTimeout: timeoutMs,
-      signal: AbortSignal.timeout(timeoutMs * 2),
+      signal,
     });
 
     const headers = normalizeHeaders(res.headers);

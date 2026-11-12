@@ -42,10 +42,13 @@ Code and identifiers are English. Everything a user reads is Japanese
 
 | Rule | How the code enforces it |
 |---|---|
-| Unverified requesters get counts only | `toPublicSummary()` keeps the grade, counts and coverage totals and drops every record; `renderOwnerReport()` throws unless the scan ran with a valid proof |
-| Unverified scans are passive | Only the page and the same-site scripts it references are fetched. Active checkers run only when `scan()` receives an `OwnershipProof`, and the public summary does not reveal that they ran |
+| Unverified requesters get counts only | `scanPublic()` returns the grade, counts and coverage totals and nothing else; `renderOwnerReport()` requires the ownership proof again and checks it against the assessed host |
+| Unverified scans are passive | Only the page and the same-site scripts it references are fetched. For an https site there is one more request, to its http:// address, to see whether it redirects. Active checkers run only with an `OwnershipProof`, and the public summary does not reveal that they ran |
 | Detect, never exploit | A detected key is never sent anywhere. Evidence keeps a 6-character prefix and a length. File probes keep a boolean and a count, not contents |
-| The scanner cannot be aimed at internal networks | `src/url/net/guard.ts` blocks loopback, private, link-local and metadata addresses at connect time (covers DNS rebinding), plus non-standard ports |
+| The scanner cannot be aimed at internal networks | `src/url/net/guard.ts` refuses loopback, private, link-local and metadata addresses and every IPv6 range that embeds IPv4, at connect time (covers DNS rebinding) and on every redirect hop, plus non-standard ports. Error messages are the same for every cause |
+| A hostile page cannot stall or crash the scanner | Text from the target is scanned in linear time with bounded matches; one deadline covers every request of a scan |
+| A result is about one site | A redirect to a different site is refused, for both tiers; an owner's proof must cover the host actually reached |
+| An error page is not graded | A non-2xx page stops the scan |
 | Details are unlocked by ownership, not by contact details | The only way to obtain an `OwnershipProof` is one of the three verification methods |
 | A result can be checked by someone else | `--json` emits the full assessment for a verified owner; `validate` checks any assessment for consistency |
 
@@ -57,9 +60,17 @@ Code and identifiers are English. Everything a user reads is Japanese
 | B. Verification file placed by the owner's AI coding tool | Sites on platform subdomains; owners who use free mail | `ownership/file.ts` |
 | C. DNS TXT record | People comfortable with DNS | `ownership/dns.ts` |
 
-Method A refuses free and carrier mail, refuses hosting-platform subdomains,
-and accepts only admin mailboxes (`admin@`, `administrator@`, `webmaster@`,
-`hostmaster@`, `postmaster@`) on large shared domains such as `ac.jp` and `go.jp`.
+Method A requires a mailbox directly on the site's registrable domain
+(`info@example.jp`, not `info@mail.example.jp`). It refuses free and carrier
+mail and sites on shared hosting domains, and accepts only admin mailboxes
+(`admin@`, `administrator@`, `webmaster@`, `hostmaster@`, `postmaster@`) on
+large shared domains such as `ac.jp` and `go.jp`. Its proof covers the one host
+that was asked for.
+
+What method A establishes is that the person can read mail at the site's own
+domain. In a small business that is the owner. In a larger organisation it is
+any member. A service built on this engine should therefore notify the domain's
+admin address whenever a detailed report is unlocked, and keep an audit log.
 
 ## Rules implemented (rules v0.1.0)
 
@@ -101,7 +112,9 @@ Only check sites you own or have permission to check.
 ## Known limits
 
 - Script discovery reads the HTML only. Chunks loaded later at runtime are not seen.
-- Method A decides eligibility and issues the proof; sending the login link is the service layer's job and is not built yet.
+- Method A decides eligibility and issues the proof; sending the login link is the service layer's job and is not built yet. `issueEmailProofAfterLinkClick()` trusts its caller to have confirmed the click.
+- The lower-level `scan()` returns every detail at either tier. It is not exported from the package entry point; a service must use `scanPublic()` for unverified requesters.
+- `.env` files that start with more than 8 KB of comments, and source maps not referenced from a script, are not found.
 - No web UI, rate limiting or audit log yet. These are required before any public deployment.
 - A grade of A means nothing was found in the checks that ran. It does not mean the site is safe.
 

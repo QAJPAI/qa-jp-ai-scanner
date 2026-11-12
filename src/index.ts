@@ -11,11 +11,13 @@ export { validateAssessment } from './core/validate';
 export type { Checker, CheckOutcome } from './core/checker';
 
 // URL layer.
-export { scan, normalizeTarget, URL_CHECKERS, type ScanOptions } from './url/scan';
+// scanPublic() returns the summary only; scanOwner() requires a proof.
+// The lower-level scan() is not exported here: it returns every detail at either tier.
+export { scanPublic, scanOwner, normalizeTarget, ScanError, URL_CHECKERS, type ScanOptions } from './url/scan';
 export type { UrlContext } from './url/context';
 
 // Ownership verification.
-export { evaluateEmailOwnership, confirmEmailOwnership, type EmailDecision } from './ownership/email';
+export { evaluateEmailOwnership, issueEmailProofAfterLinkClick, type EmailDecision } from './ownership/email';
 export { verifyByFile, WELL_KNOWN_PATH } from './ownership/file';
 export { verifyByDns, dnsRecordName } from './ownership/dns';
 export { mintVerificationToken } from './ownership/token';

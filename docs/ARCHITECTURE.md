@@ -67,7 +67,8 @@ seen from outside and must not be tested without consent, so the URL layer emits
 ### Fingerprints
 
 `fp_` + a hash of (layer, rule, code, stable key). The key identifies the issue
-without volatile detail (no offsets, no ports) and without secret material. The
+without volatile detail (no offsets, no ports, no build hashes in file names)
+and without secret material. The
 same issue keeps its fingerprint across runs, which is what makes re-runs
 additive and lets a certificate be bound to a version.
 
@@ -75,8 +76,12 @@ additive and lets a certificate be bound to a version.
 
 Exactly one unit per rule, always. A rule that was not examined is `not_run`
 with a reason. It is never reported as passed. A check that crashed is `error`.
-A check with known limits is `partial` with a note. Every summary states its
-coverage, so a grade can only be read together with what was examined.
+A check with known limits is `partial` with a note, and the note says which
+limit applied: only statically referenced scripts, some content unreadable, the
+match cap reached, some probes unanswered. When a rule is covered by both a
+passive and an active check, the unit keeps the passive result alongside, and
+the public view is built from that. Every summary states its coverage, so a
+grade can only be read together with what was examined.
 
 ## Invariants
 
@@ -87,10 +92,16 @@ Each of these is enforced by the validator or by a test, not by convention.
 3. A public-tier assessment contains no active check and no record from one.
 4. The public summary is computed from passive checks only, even when derived
    from an owner-tier assessment.
-5. The detailed report refuses to render without a valid ownership proof.
+5. The detailed report refuses to render without a valid ownership proof for the
+   assessed host, presented again at render time.
 6. Evidence never contains a full secret or fetched file contents.
-7. A failed checker is recorded as an error, never as "nothing found".
+7. A check that failed, or content that could not be read, is recorded as such —
+   never as "nothing found". A failed check is shown next to the grade.
 8. Reports are derived from the assessment and nothing else.
+9. An owner-tier scan never touches a host its proof does not cover, including
+   by redirect.
+10. Work done on text from the target is linear in its size and bounded in output.
+11. The public coverage view is identical whether or not owner-only checks ran.
 
 ## Adding a checker
 

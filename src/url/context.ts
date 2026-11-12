@@ -8,6 +8,32 @@ export interface ServedText {
   body: string;
 }
 
+/**
+ * How much of what the page references was actually read. A checker that
+ * inspects served text must report these in its coverage: an unread script is
+ * not a clean script.
+ */
+export interface LoadStats {
+  pageTruncated: boolean;
+  /** More opening tags than the scanner examines. */
+  tagLimitHit: boolean;
+  scriptsFound: number;
+  scriptsRead: number;
+  /** Fetch failed or did not answer 200. */
+  scriptsFailed: number;
+  /** Read only up to the size cap. */
+  scriptsTruncated: number;
+  /** Not requested: over the script cap, or the time budget ran out. */
+  scriptsSkipped: number;
+}
+
+export const everythingRead = (load: LoadStats): boolean =>
+  !load.pageTruncated &&
+  !load.tagLimitHit &&
+  load.scriptsFailed === 0 &&
+  load.scriptsTruncated === 0 &&
+  load.scriptsSkipped === 0;
+
 /** Everything a URL-layer checker may look at. */
 export interface UrlContext {
   page: FetchResult;
@@ -16,8 +42,11 @@ export interface UrlContext {
   scripts: ServedText[];
   /** The page HTML followed by `scripts`. */
   texts: ServedText[];
+  load: LoadStats;
   /** Whether http:// redirects to https://; undefined when not probed. */
   httpRedirectsToHttps?: boolean;
-  /** Options active checkers must use for any request they make. */
+  /** Options active checkers must use for any request they make. Carries the scan deadline. */
   fetch: FetchOptions;
+  /** True once the scan's time budget is spent: make no further requests. */
+  outOfTime: () => boolean;
 }

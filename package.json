@@ -1,6 +1,6 @@
 {
   "name": "qa-jp-ai-scanner",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "QA.JP.AI scanner for AI-generated web apps. URL layer: passive checks for anyone, details for verified owners only.",
   "type": "module",
   "engines": {

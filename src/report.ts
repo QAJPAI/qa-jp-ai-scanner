@@ -4,6 +4,7 @@ import { summarize, type Assessment, type Summary } from './core/assessment';
 import type { CoverageUnit } from './core/coverage';
 import type { ConfirmedRecord, NeedsValidationRecord } from './core/records';
 import { SEVERITIES } from './core/types';
+import { proofCovers, type OwnershipProof } from './ownership/proof';
 import {
   blockerLabel,
   coverageNoteLabel,
@@ -69,9 +70,13 @@ function header(title: string, s: PublicSummary): string[] {
   ];
 }
 
+/** A check that failed must be visible next to the grade it may have flattered. */
+const incompleteLine = (s: PublicSummary): string[] => (s.coverage.error > 0 ? [t.incomplete(s.coverage.error)] : []);
+
 export function renderPublicSummary(summary: PublicSummary): string {
   return [
     ...header(t.publicTitle, summary),
+    ...incompleteLine(summary),
     t.checksPublic,
     '',
     t.detailsGated,
@@ -107,14 +112,20 @@ function renderCoverage(unit: CoverageUnit): string {
       ? notRunReasonLabel[unit.reason]
       : unit.status === 'partial' && unit.note
         ? coverageNoteLabel[unit.note]
-        : '';
+        : unit.status === 'error' && unit.passive?.note
+          ? coverageNoteLabel[unit.passive.note]
+          : '';
   return `   ${unit.ruleId} ${ruleTitle[unit.ruleId]}: ${coverageStatusLabel[unit.status]}${detail ? `（${detail}）` : ''}`;
 }
 
-/** Detailed report. Refuses to render an assessment that was not owner-verified. */
-export function renderOwnerReport(assessment: Assessment): string {
-  if (assessment.tier !== 'owner') {
-    throw new Error('Detailed report requires a scan run with a valid ownership proof');
+/**
+ * Detailed report. The assessment is plain data and its `tier` field can be
+ * edited, so the field alone is not trusted: the caller must present the
+ * ownership proof again, and it must cover the assessed host and still be valid.
+ */
+export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof, now: number = Date.now()): string {
+  if (assessment.tier !== 'owner' || !proof || !proofCovers(proof, targetName(assessment), now)) {
+    throw new Error('Detailed report requires a valid ownership proof for this target');
   }
   const summary: PublicSummary = {
     host: targetName(assessment),
@@ -129,7 +140,7 @@ export function renderOwnerReport(assessment: Assessment): string {
     (r): r is NeedsValidationRecord => r.verdict === 'needs_validation',
   );
 
-  const lines = [...header(t.ownerTitle, summary), t.checksOwner, '', t.findingsHeading];
+  const lines = [...header(t.ownerTitle, summary), ...incompleteLine(summary), t.checksOwner, '', t.findingsHeading];
   if (confirmed.length === 0) lines.push(t.noFindings, '');
   else confirmed.forEach((r, i) => lines.push(...renderConfirmed(r, i + 1), ''));
 

@@ -11,10 +11,26 @@ import { RULE_IDS, type CheckMode, type Layer, type RuleId, type Tier } from './
 
 export type CoverageStatus = 'checked' | 'partial' | 'not_run' | 'error';
 
-export type NotRunReason = 'requires_owner_verification' | 'requires_source' | 'not_implemented';
+export const NOT_RUN_REASONS = ['requires_owner_verification', 'requires_source', 'not_implemented'] as const;
+export type NotRunReason = (typeof NOT_RUN_REASONS)[number];
 
 /** Known limits of a check that did run. */
-export type CoverageNote = 'html_referenced_scripts_only' | 'presence_hint_only';
+export const COVERAGE_NOTES = [
+  'html_referenced_scripts_only',
+  'presence_hint_only',
+  'some_content_not_read',
+  'record_limit_reached',
+  'some_probes_failed',
+] as const;
+export type CoverageNote = (typeof COVERAGE_NOTES)[number];
+
+/** How far one mode of checking got on a rule. */
+export interface ModeCoverage {
+  status: 'checked' | 'partial' | 'error';
+  checker: string;
+  /** Present exactly when status is partial. */
+  note?: CoverageNote;
+}
 
 export interface CoverageUnit {
   ruleId: RuleId;
@@ -27,14 +43,18 @@ export interface CoverageUnit {
   reason?: NotRunReason;
   /** Present when status is partial. */
   note?: CoverageNote;
+  /**
+   * Present only when the unit above comes from an active check and a passive
+   * check also covered the rule. The public view is built from this, so it
+   * neither changes nor reveals anything when an owner-only check runs.
+   */
+  passive?: ModeCoverage;
 }
 
-/** What a checker reports about the rules it covers. */
-export interface CoverageReport {
-  ruleId: RuleId;
-  status: 'checked' | 'partial' | 'error';
-  note?: CoverageNote;
-}
+/** What a checker reports about one rule it covers. A partial result must say why. */
+export type CoverageReport =
+  | { ruleId: RuleId; status: 'checked' | 'error' }
+  | { ruleId: RuleId; status: 'partial'; note: CoverageNote };
 
 export interface CheckerCoverage {
   checker: string;
@@ -48,30 +68,47 @@ export interface DeferredRule {
   reason: NotRunReason;
 }
 
-const STATUS_RANK: Record<CoverageStatus, number> = { checked: 3, partial: 2, error: 1, not_run: 0 };
+const STATUS_RANK: Record<ModeCoverage['status'], number> = { checked: 3, partial: 2, error: 1 };
+
+function better(a: ModeCoverage | undefined, b: ModeCoverage): ModeCoverage {
+  return !a || STATUS_RANK[b.status] > STATUS_RANK[a.status] ? b : a;
+}
 
 /**
  * Build the ledger for one layer. Always returns exactly one unit per rule,
  * so the ledger can be read as "N of 15 rules examined".
  */
 export function buildLedger(layer: Layer, ran: CheckerCoverage[], deferred: DeferredRule[] = []): CoverageUnit[] {
-  const best = new Map<RuleId, CoverageUnit>();
+  const best: Record<CheckMode, Map<RuleId, ModeCoverage>> = { passive: new Map(), active: new Map() };
   for (const { checker, mode, reports } of ran) {
     for (const report of reports) {
-      const unit: CoverageUnit = { ruleId: report.ruleId, layer, status: report.status, mode, checker };
-      if (report.status === 'partial' && report.note) unit.note = report.note;
-      const current = best.get(report.ruleId);
-      if (!current || STATUS_RANK[unit.status] > STATUS_RANK[current.status]) best.set(report.ruleId, unit);
+      const entry: ModeCoverage = { status: report.status, checker };
+      if (report.status === 'partial') entry.note = report.note;
+      best[mode].set(report.ruleId, better(best[mode].get(report.ruleId), entry));
     }
   }
   const deferredReason = new Map(deferred.map((d) => [d.ruleId, d.reason]));
 
-  return RULE_IDS.map((ruleId) => {
-    const unit = best.get(ruleId);
-    if (unit) return unit;
-    const reason: NotRunReason =
-      deferredReason.get(ruleId) ?? (RULES[ruleId].layers.includes(layer) ? 'not_implemented' : 'requires_source');
-    return { ruleId, layer, status: 'not_run', reason };
+  return RULE_IDS.map((ruleId): CoverageUnit => {
+    const passive = best.passive.get(ruleId);
+    const active = best.active.get(ruleId);
+    const winner = active && (!passive || STATUS_RANK[active.status] > STATUS_RANK[passive.status]) ? active : passive;
+
+    if (!winner) {
+      const reason: NotRunReason =
+        deferredReason.get(ruleId) ?? (RULES[ruleId].layers.includes(layer) ? 'not_implemented' : 'requires_source');
+      return { ruleId, layer, status: 'not_run', reason };
+    }
+    const unit: CoverageUnit = {
+      ruleId,
+      layer,
+      status: winner.status,
+      mode: winner === active ? 'active' : 'passive',
+      checker: winner.checker,
+    };
+    if (winner.note) unit.note = winner.note;
+    if (winner === active && passive) unit.passive = passive;
+    return unit;
   });
 }
 
@@ -84,17 +121,20 @@ export interface CoverageCounts {
 }
 
 /**
- * Count the ledger as seen by a tier. For 'public', units covered by an
- * active check are counted as not run, so the summary never reveals that an
- * owner-only check took place.
+ * Count the ledger as seen by a tier. The 'public' view counts passive
+ * coverage only: a rule covered solely by an active check counts as not run,
+ * and a rule covered by both counts by its passive result. The public summary
+ * is therefore identical whether or not owner-only checks ran.
  */
 export function countCoverage(units: CoverageUnit[], tier: Tier): CoverageCounts {
   const counts: CoverageCounts = { total: units.length, checked: 0, partial: 0, notRun: 0, error: 0 };
   for (const unit of units) {
-    const hidden = tier === 'public' && unit.mode === 'active';
-    if (hidden || unit.status === 'not_run') counts.notRun++;
-    else if (unit.status === 'checked') counts.checked++;
-    else if (unit.status === 'partial') counts.partial++;
+    let status: CoverageStatus = unit.status;
+    if (tier === 'public' && unit.mode === 'active') status = unit.passive?.status ?? 'not_run';
+
+    if (status === 'not_run') counts.notRun++;
+    else if (status === 'checked') counts.checked++;
+    else if (status === 'partial') counts.partial++;
     else counts.error++;
   }
   return counts;
