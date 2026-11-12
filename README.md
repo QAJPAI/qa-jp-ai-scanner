@@ -19,7 +19,11 @@ There are two entrances. Both produce the same result format.
 
 ## Results
 
-Every result has three parts, and none is shown without the others.
+Every result has three parts, and none is shown without the others. All three
+are shown in full to a verified owner. An unverified requester sees the grade
+and counts for basic configuration, the coverage totals, and one sentence that
+is the same for every site: whether serious problems exist is shown after
+ownership is verified.
 
 - **Problems found** (`confirmed`): evidence was observed. Graded P0 / P1 / P2.
 - **Items for the owner to check** (`needs_validation`): a concrete concern that
@@ -42,7 +46,7 @@ Code and identifiers are English. Everything a user reads is Japanese
 
 | Rule | How the code enforces it |
 |---|---|
-| Unverified requesters get counts only | `scanPublic()` returns the grade, counts and coverage totals and nothing else; `renderOwnerReport()` requires the ownership proof again and checks it against the assessed host |
+| Unverified requesters learn nothing about serious problems | The public view reports basic configuration only (transport and response headers: what any browser's developer tools show). For every other rule it carries nothing, not even a count, so it is identical for a site with a leaked key and a site without one. `scanPublic()` returns that view and nothing else; `renderOwnerReport()` requires the ownership proof again and checks it against the assessed host |
 | Unverified scans are passive | Only the page and the same-site scripts it references are fetched. For an https site there is one more request, to its http:// address, to see whether it redirects. Active checkers run only with an `OwnershipProof`, and the public summary does not reveal that they ran |
 | Detect, never exploit | A detected key is never sent anywhere. Evidence keeps a 6-character prefix and a length. File probes keep a boolean and a count, not contents |
 | The scanner cannot be aimed at internal networks | `src/url/net/guard.ts` refuses loopback, private, link-local and metadata addresses and every IPv6 range that embeds IPv4, at connect time (covers DNS rebinding) and on every redirect hop, plus non-standard ports. Error messages are the same for every cause |

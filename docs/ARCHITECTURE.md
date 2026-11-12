@@ -44,7 +44,7 @@ evidence from both.
 
 | Object | File | What it is |
 |---|---|---|
-| Rule registry | `core/rules.ts` | The machine-readable list of what is checked: id, maximum severity, which layers can answer it |
+| Rule registry | `core/rules.ts` | The machine-readable list of what is checked: id, maximum severity, which layers can answer it, and whether its findings may be disclosed before ownership is verified |
 | Record | `core/records.ts` | One issue, with a verdict and a stable fingerprint |
 | Coverage ledger | `core/coverage.ts` | For every rule: examined, partly examined, not examined (and why), or failed |
 | Assessment | `core/assessment.ts` | Records + ledger + versions. The only input to reports |
@@ -90,8 +90,10 @@ Each of these is enforced by the validator or by a test, not by convention.
 1. Only `confirmed` records carry a severity, and never one above the rule's maximum.
 2. A record can exist only for a rule the ledger says was examined.
 3. A public-tier assessment contains no active check and no record from one.
-4. The public summary is computed from passive checks only, even when derived
-   from an owner-tier assessment.
+4. The public summary is computed from passive checks under rules marked for
+   public disclosure (basic configuration) and nothing else, even when derived
+   from an owner-tier assessment. It is identical for two sites that differ
+   only in owner-disclosure findings.
 5. The detailed report refuses to render without a valid ownership proof for the
    assessed host, presented again at render time.
 6. Evidence never contains a full secret or fetched file contents.

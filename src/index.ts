@@ -3,7 +3,7 @@
 
 // Core: the judging layer shared by every layer and every checker.
 export * from './core/types';
-export { RULES, type RuleDef } from './core/rules';
+export { RULES, type Disclosure, type RuleDef } from './core/rules';
 export { fingerprintOf, recordFactory, type AssessmentRecord, type Blocker } from './core/records';
 export { buildLedger, countCoverage, type CoverageUnit } from './core/coverage';
 export { summarize, gradeFor, type Assessment, type Summary } from './core/assessment';

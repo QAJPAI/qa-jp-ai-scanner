@@ -64,22 +64,27 @@ test('public tier: counts only, passive requests only, nothing identifying', asy
     );
     assert.equal(coverageOf(assessment, 'R05').reason, 'requires_source');
 
+    // The full picture exists inside the engine…
+    const full = summarize(assessment, 'owner');
+    assert.equal(full.counts.P0, 3, 'service_role + Stripe live + OpenAI');
+    assert.equal(full.needsValidation, 1, 'Supabase RLS cannot be seen from outside');
+
+    // …but the public view carries basic configuration only.
     const summary = toPublicSummary(assessment);
-    assert.equal(summary.counts.P0, 3, 'service_role + Stripe live + OpenAI');
-    assert.equal(summary.counts.P1, 1, 'no HTTPS');
-    assert.equal(summary.grade, 'E');
-    assert.equal(summary.needsValidation, 1, 'Supabase RLS cannot be seen from outside');
+    assert.deepEqual(summary.counts, { P0: 0, P1: 1, P2: 3 }, 'no HTTPS + three missing headers');
+    assert.equal(summary.grade, 'D');
     assert.deepEqual([summary.coverage.checked, summary.coverage.partial, summary.coverage.total], [1, 2, 15]);
     assert.equal('records' in summary, false);
+    assert.equal('needsValidation' in summary, false);
 
     const text = renderPublicSummary(summary) + JSON.stringify(summary);
-    for (const leak of ['service_role', 'Supabase', 'supabase', 'Stripe', 'OpenAI', 'RLS', 'app.js', 'offset', 'fp_', serviceRole, stripeLive, openai, 'sk_liv', 'eyJ']) {
+    for (const leak of ['service_role', 'Supabase', 'supabase', 'Stripe', 'OpenAI', 'RLS', 'app.js', 'offset', 'fp_', 'P0（', '確認をお願いしたい項目', serviceRole, stripeLive, openai, 'sk_liv', 'eyJ']) {
       assert.equal(text.includes(leak), false, `public output leaks "${leak}"`);
     }
-    assert.match(text, /総合評価: E/);
-    assert.match(text, /P0（至急）3 件/);
-    assert.match(text, /確認をお願いしたい項目: 1 件/);
+    assert.match(text, /基本設定の評価: D/);
+    assert.match(text, /P1（重大）1 件 \/ P2（改善推奨）3 件/);
     assert.match(text, /全 15 項目のうち 1 項目を検査、2 項目を一部検査/);
+    assert.match(text, /重大な問題の有無と、問題の場所・修正方法は、サイトの所有者であることを確認できた方にのみ表示します/);
 
     // Details need the tier AND a valid proof for this host. Editing the tier field is not enough.
     const elsewhere = issueEmailProofAfterLinkClick('info@example.jp', 'example.jp')!;
@@ -90,7 +95,7 @@ test('public tier: counts only, passive requests only, nothing identifying', asy
 
     // The public entry point returns the summary and nothing else.
     const direct = await scanPublic(site.origin, OPTS);
-    assert.deepEqual(Object.keys(direct).sort(), ['counts', 'coverage', 'grade', 'host', 'layer', 'needsValidation', 'rulesVersion', 'scannedAt']);
+    assert.deepEqual(Object.keys(direct).sort(), ['counts', 'coverage', 'grade', 'host', 'layer', 'rulesVersion', 'scannedAt']);
   } finally {
     await site.close();
   }
@@ -136,16 +141,42 @@ test('owner tier: file verification unlocks details and the active checks', asyn
       assert.equal(everything.includes(secret), false, 'report contains fetched secret material');
     }
 
-    // Passive: 3 keys (P0) + no HTTPS (P1). Active adds .env (P0) and .git (P1).
+    // Owner view: 3 keys + .env (P0); no HTTPS + .git (P1). Public view: basic configuration only.
     const asPublic = toPublicSummary(assessment);
     const asOwner = summarize(assessment);
-    assert.deepEqual([asPublic.counts.P0, asPublic.counts.P1], [3, 1]);
+    assert.deepEqual([asPublic.counts.P0, asPublic.counts.P1], [0, 1]);
     assert.deepEqual([asOwner.counts.P0, asOwner.counts.P1], [4, 2]);
     // The public view of an owner assessment must not show that R11 ran.
     assert.equal(asPublic.coverage.checked, 1);
     assert.equal(asOwner.coverage.checked, 2);
   } finally {
     await site.close();
+  }
+});
+
+test('the public view is identical for a site with leaked keys and a site without', async () => {
+  const shell = (appJs: string, extra: Record<string, object> = {}) =>
+    startFixture({
+      '/': { headers: { 'content-type': 'text/html' }, body: html(['/assets/app.js']) },
+      '/assets/app.js': { body: appJs },
+      ...extra,
+    });
+  const clean = await shell('console.log("hello")');
+  const leaky = await shell(
+    `createClient("${SUPABASE_URL}","${serviceRole}");Stripe("${stripeLive}");const k="${openai}"`,
+    { '/.env': { body: 'DB_PASSWORD=x\n' }, '/.git/HEAD': { body: 'ref: refs/heads/main\n' } },
+  );
+  try {
+    const now = () => Date.parse('2026-11-12T00:00:00Z');
+    const a = await scanPublic(clean.origin, { ...OPTS, now });
+    const b = await scanPublic(leaky.origin, { ...OPTS, now });
+    // Nothing an unverified requester receives distinguishes the two.
+    assert.deepEqual(b, a);
+    assert.equal(renderPublicSummary(b), renderPublicSummary(a));
+    // And the difference is real: the owner view of the second site is not clean.
+    assert.equal(summarize(await scan(leaky.origin, OPTS), 'owner').counts.P0, 3);
+  } finally {
+    await Promise.all([clean.close(), leaky.close()]);
   }
 });
 
@@ -193,7 +224,7 @@ test('public-by-design keys are not findings, but the owner is asked to check th
       ['needs_validation', 'baas.firebase_rules_unverified'],
       ['needs_validation', 'baas.supabase_rls_unverified'],
     ]);
-    const summary = summarize(assessment);
+    const summary = summarize(assessment, 'owner');
     assert.equal(summary.counts.P0, 0);
     assert.equal(summary.needsValidation, 2, 'needs_validation is not a finding and has no severity');
   } finally {
@@ -208,7 +239,7 @@ test('a site that uses neither service gets no access-rule item', async () => {
   });
   try {
     const assessment = await scan(site.origin, OPTS);
-    assert.equal(summarize(assessment).needsValidation, 0);
+    assert.equal(summarize(assessment, 'owner').needsValidation, 0);
   } finally {
     await site.close();
   }

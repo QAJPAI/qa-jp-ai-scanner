@@ -228,7 +228,7 @@ test('a page full of key-shaped decoys cannot crash the check or hide a real key
     assert.deepEqual([unit(assessment, 'R02').status, unit(assessment, 'R02').note], ['partial', 'record_limit_reached']);
     assert.ok(assessment.records.length <= MAX_SECRET_RECORDS + 10);
     assert.ok(assessment.records.some((r) => r.code === 'secret.stripe_live'), 'the real key is still reported');
-    assert.equal(summarize(assessment).grade, 'E');
+    assert.equal(summarize(assessment, 'owner').grade, 'E');
     assert.deepEqual(validateAssessment(assessment), [], 'the engine never emits a result its own validator rejects');
   } finally {
     await site.close();
@@ -252,7 +252,7 @@ test('a failed check is shown next to the grade', () => {
       coverage,
     }),
   );
-  assert.match(text, /総合評価: A/);
+  assert.match(text, /基本設定の評価: A/);
   assert.match(text, /1 項目の検査が完了しなかったため、この評価は不完全です/);
 });
 

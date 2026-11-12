@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { countCoverage, type CoverageCounts, type CoverageUnit } from './coverage';
 import type { AssessmentRecord, ConfirmedRecord } from './records';
+import { RULES } from './rules';
 import type { ASSESSMENT_SCHEMA, Grade, Layer, Severity, Tier } from './types';
 
 /**
@@ -49,11 +50,17 @@ export function gradeFor(counts: SeverityCounts): Grade {
 }
 
 /**
- * Summarize an assessment as seen by a tier. The 'public' view is computed
- * from passive checks only, whatever tier the assessment itself ran at.
+ * Summarize an assessment as seen by a tier.
+ *
+ * The 'public' view counts only passive records under rules whose findings may
+ * be disclosed to anyone (basic configuration). For every other rule the
+ * public view carries nothing at all — not a count, not a hint — so it is the
+ * same for a site with a leaked key as for a site without one.
  */
 export function summarize(assessment: Assessment, as: Tier = assessment.tier): Summary {
-  const visible = assessment.records.filter((r) => as === 'owner' || r.mode === 'passive');
+  const visible = assessment.records.filter(
+    (r) => as === 'owner' || (r.mode === 'passive' && RULES[r.ruleId].disclosure === 'public'),
+  );
   const confirmed = visible.filter((r): r is ConfirmedRecord => r.verdict === 'confirmed');
   const counts = countBySeverity(confirmed);
   return {

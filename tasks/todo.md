@@ -47,7 +47,7 @@
 
 ### Open after review
 - [ ] Service layer must notify the domain's admin address and log whenever details are unlocked (method A lets any mailbox holder in an organisation in)
-- [ ] Decide whether the public tier should show P0 / P1 counts at all (a non-zero P0 count tells anyone a key is in the page)
+- [x] Decided 2026-11-12: the public tier shows basic configuration only; nothing about owner-disclosure rules, not even counts (engine 0.4.0)
 - [ ] Run each scan in a worker with a hard timeout as a second line of defence
 
 ### Next

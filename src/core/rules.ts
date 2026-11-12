@@ -7,32 +7,50 @@ import type { Layer, RuleId, Severity } from './types';
  * checks. Display text lives in src/i18n. Checkers implement rules; they do not
  * define them.
  */
+/**
+ * Whether the hosted service may tell an unverified requester that a rule has
+ * findings.
+ *
+ *  'public'  basic configuration anyone already sees in a browser's developer
+ *            tools (transport, response headers). Counts are shown to anyone.
+ *  'owner'   anything whose mere existence helps an attacker choose a target:
+ *            leaked keys, exposed files, access-rule concerns. Nothing about
+ *            these — not even a count — is shown before ownership is verified.
+ */
+export type Disclosure = 'public' | 'owner';
+
 export interface RuleDef {
   id: RuleId;
   /** The most severe grade a confirmed record under this rule may carry. */
   maxSeverity: Severity;
   /** Layers able to produce evidence for this rule. */
   layers: readonly Layer[];
+  disclosure: Disclosure;
 }
 
-const def = (id: RuleId, maxSeverity: Severity, ...layers: Layer[]): RuleDef => ({ id, maxSeverity, layers });
+const def = (id: RuleId, maxSeverity: Severity, layers: Layer[], disclosure: Disclosure = 'owner'): RuleDef => ({
+  id,
+  maxSeverity,
+  layers,
+  disclosure,
+});
 
 export const RULES: Readonly<Record<RuleId, RuleDef>> = {
-  R01: def('R01', 'P0', 'repo', 'url'), // database access rules not in effect
-  R02: def('R02', 'P0', 'url', 'repo'), // privileged keys in front-end code
-  R03: def('R03', 'P0', 'repo', 'url'), // auth enforced only in the front end
-  R04: def('R04', 'P0', 'url', 'repo'), // user data reachable without login
-  R05: def('R05', 'P0', 'repo'), // users can rewrite their own role or status
-  R06: def('R06', 'P0', 'repo', 'url'), // sensitive files in public storage
-  R07: def('R07', 'P1', 'repo'), // no rate limit or spend cap
-  R08: def('R08', 'P1', 'repo'), // injection
-  R09: def('R09', 'P1', 'repo'), // stated restriction not enforced server-side
-  R10: def('R10', 'P1', 'repo'), // dependency risk
-  R11: def('R11', 'P0', 'url'), // internal files and debug info exposed
-  R12: def('R12', 'P1', 'repo'), // input drives an LLM to act beyond authority
-  R13: def('R13', 'P1', 'repo'), // agent over-privileged, no stop channel
-  R14: def('R14', 'P1', 'url'), // transport and response headers
-  R15: def('R15', 'P2', 'repo'), // logging
+  R01: def('R01', 'P0', ['repo', 'url']), // database access rules not in effect
+  R02: def('R02', 'P0', ['url', 'repo']), // privileged keys in front-end code
+  R03: def('R03', 'P0', ['repo', 'url']), // auth enforced only in the front end
+  R04: def('R04', 'P0', ['url', 'repo']), // user data reachable without login
+  R05: def('R05', 'P0', ['repo']), // users can rewrite their own role or status
+  R06: def('R06', 'P0', ['repo', 'url']), // sensitive files in public storage
+  R07: def('R07', 'P1', ['repo']), // no rate limit or spend cap
+  R08: def('R08', 'P1', ['repo']), // injection
+  R09: def('R09', 'P1', ['repo']), // stated restriction not enforced server-side
+  R10: def('R10', 'P1', ['repo']), // dependency risk
+  R11: def('R11', 'P0', ['url']), // internal files and debug info exposed
+  R12: def('R12', 'P1', ['repo']), // input drives an LLM to act beyond authority
+  R13: def('R13', 'P1', ['repo']), // agent over-privileged, no stop channel
+  R14: def('R14', 'P1', ['url'], 'public'), // transport and response headers
+  R15: def('R15', 'P2', ['repo']), // logging
 };
 
 const RANK: Record<Severity, number> = { P0: 0, P1: 1, P2: 2 };

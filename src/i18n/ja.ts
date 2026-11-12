@@ -20,6 +20,15 @@ export const gradeLabel: Record<Grade, string> = {
   E: '至急の対応が必要な問題があります',
 };
 
+/** The public view grades basic configuration only, and its wording must not suggest more. */
+export const publicGradeLabel: Record<Grade, string> = {
+  A: '基本設定に問題は見つかりませんでした',
+  B: '基本設定に改善を推奨する項目があります',
+  C: '基本設定に改善を推奨する項目が複数あります',
+  D: '基本設定に重大な問題があります',
+  E: '基本設定に至急の対応が必要な問題があります',
+};
+
 interface FindingText {
   title: string;
   fix: string;
@@ -211,8 +220,11 @@ export const report = {
   countUnit: '件',
   checksPublic: '実施した検査: 通常のページ表示と同等のアクセスのみ',
   checksOwner: '実施した検査: 通常のページ表示と同等のアクセス、および所有者確認後にのみ行う検査',
-  detailsGated:
-    '問題の種類・場所・修正方法は、サイトの所有者であることを確認できた方にのみ表示します。',
+  basicGrade: '基本設定の評価',
+  basicCounts: '基本設定の件数',
+  seriousGated:
+    'キーの露出など重大な問題の有無と、問題の場所・修正方法は、サイトの所有者であることを確認できた方にのみ表示します。',
+  sameForEverySite: 'この案内は、問題の有無にかかわらず、すべてのサイトで同じ内容です。',
   noFindings: '今回の検査範囲では問題は見つかりませんでした。',
   needsValidationCount: '確認をお願いしたい項目',
   incomplete: (count: number) =>

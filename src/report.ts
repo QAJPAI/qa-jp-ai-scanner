@@ -3,7 +3,7 @@
 import { summarize, type Assessment, type Summary } from './core/assessment';
 import type { CoverageUnit } from './core/coverage';
 import type { ConfirmedRecord, NeedsValidationRecord } from './core/records';
-import { SEVERITIES } from './core/types';
+import { SEVERITIES, type Severity } from './core/types';
 import { proofCovers, type OwnershipProof } from './ownership/proof';
 import {
   blockerLabel,
@@ -12,6 +12,7 @@ import {
   findingText,
   gradeLabel,
   needsValidationText,
+  publicGradeLabel,
   notRunReasonLabel,
   report as t,
   ruleTitle,
@@ -23,12 +24,20 @@ import {
  * person reads cannot disagree with the data a machine can re-verify.
  */
 
-/** What an unverified requester is allowed to see. */
-export interface PublicSummary extends Summary {
+interface Headed {
   host: string;
   scannedAt: string;
   rulesVersion: string;
 }
+
+/**
+ * What an unverified requester is allowed to see: the basic-configuration
+ * grade and counts, and how much was examined. It has no field that could
+ * carry anything about owner-only rules.
+ */
+export type PublicSummary = Headed & Omit<Summary, 'needsValidation'>;
+
+type OwnerSummary = Headed & Summary;
 
 function targetName(assessment: Assessment): string {
   return assessment.target.layer === 'url' ? assessment.target.host : assessment.target.ref;
@@ -40,11 +49,12 @@ function targetName(assessment: Assessment): string {
  * neither the outcome nor the existence of owner-only checks.
  */
 export function toPublicSummary(assessment: Assessment): PublicSummary {
+  const { needsValidation: _ownerOnly, ...summary } = summarize(assessment, 'public');
   return {
     host: targetName(assessment),
     scannedAt: assessment.startedAt,
     rulesVersion: assessment.rulesVersion,
-    ...summarize(assessment, 'public'),
+    ...summary,
   };
 }
 
@@ -57,32 +67,47 @@ const JST = new Intl.DateTimeFormat('ja-JP', {
   minute: '2-digit',
 });
 
-function header(title: string, s: PublicSummary): string[] {
-  const counts = SEVERITIES.map((sev) => `${sev}（${severityLabel[sev]}）${s.counts[sev]} ${t.countUnit}`).join(' / ');
-  return [
-    title,
-    `${t.target}: ${s.host}`,
-    `${t.scannedAt}: ${JST.format(new Date(s.scannedAt))}（日本時間）`,
-    `${t.grade}: ${s.grade}（${gradeLabel[s.grade]}）`,
-    `${t.counts}: ${counts}`,
-    `${t.needsValidationCount}: ${s.needsValidation} ${t.countUnit}`,
-    t.coverageLine(s.coverage.total, s.coverage.checked, s.coverage.partial),
-  ];
-}
+const countsText = (s: PublicSummary, severities: readonly Severity[]) =>
+  severities.map((sev) => `${sev}（${severityLabel[sev]}）${s.counts[sev]} ${t.countUnit}`).join(' / ');
+
+const headLines = (title: string, s: Headed): string[] => [
+  title,
+  `${t.target}: ${s.host}`,
+  `${t.scannedAt}: ${JST.format(new Date(s.scannedAt))}（日本時間）`,
+];
 
 /** A check that failed must be visible next to the grade it may have flattered. */
 const incompleteLine = (s: PublicSummary): string[] => (s.coverage.error > 0 ? [t.incomplete(s.coverage.error)] : []);
 
+/**
+ * The public view. It reports basic configuration only and always carries the
+ * same sentence about serious problems, whether or not any exist.
+ */
 export function renderPublicSummary(summary: PublicSummary): string {
   return [
-    ...header(t.publicTitle, summary),
+    ...headLines(t.publicTitle, summary),
+    `${t.basicGrade}: ${summary.grade}（${publicGradeLabel[summary.grade]}）`,
+    // Basic-configuration rules cannot reach P0, so only P1 and P2 are listed.
+    `${t.basicCounts}: ${countsText(summary, ['P1', 'P2'])}`,
+    t.coverageLine(summary.coverage.total, summary.coverage.checked, summary.coverage.partial),
     ...incompleteLine(summary),
     t.checksPublic,
     '',
-    t.detailsGated,
+    t.seriousGated,
+    t.sameForEverySite,
     t.disclaimer,
     `${t.rulesVersion}: v${summary.rulesVersion}`,
   ].join('\n');
+}
+
+function ownerHeader(s: OwnerSummary): string[] {
+  return [
+    ...headLines(t.ownerTitle, s),
+    `${t.grade}: ${s.grade}（${gradeLabel[s.grade]}）`,
+    `${t.counts}: ${countsText(s, SEVERITIES)}`,
+    `${t.needsValidationCount}: ${s.needsValidation} ${t.countUnit}`,
+    t.coverageLine(s.coverage.total, s.coverage.checked, s.coverage.partial),
+  ];
 }
 
 function renderConfirmed(r: ConfirmedRecord, index: number): string[] {
@@ -127,7 +152,7 @@ export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof,
   if (assessment.tier !== 'owner' || !proof || !proofCovers(proof, targetName(assessment), now)) {
     throw new Error('Detailed report requires a valid ownership proof for this target');
   }
-  const summary: PublicSummary = {
+  const summary: OwnerSummary = {
     host: targetName(assessment),
     scannedAt: assessment.startedAt,
     rulesVersion: assessment.rulesVersion,
@@ -140,7 +165,7 @@ export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof,
     (r): r is NeedsValidationRecord => r.verdict === 'needs_validation',
   );
 
-  const lines = [...header(t.ownerTitle, summary), ...incompleteLine(summary), t.checksOwner, '', t.findingsHeading];
+  const lines = [...ownerHeader(summary), ...incompleteLine(summary), t.checksOwner, '', t.findingsHeading];
   if (confirmed.length === 0) lines.push(t.noFindings, '');
   else confirmed.forEach((r, i) => lines.push(...renderConfirmed(r, i + 1), ''));
 

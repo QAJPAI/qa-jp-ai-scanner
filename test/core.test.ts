@@ -87,7 +87,7 @@ test('when two checkers cover a rule, the more complete result is kept', () => {
   assert.deepEqual([unit.status, unit.checker], ['partial', 'b']);
 });
 
-test('summaries: needs_validation has no severity; the public view hides active checks', () => {
+test('summaries: needs_validation has no severity; the public view shows basic configuration only', () => {
   const a = sample();
   const owner = summarize(a);
   assert.deepEqual(owner.counts, { P0: 1, P1: 1, P2: 1 });
@@ -96,7 +96,10 @@ test('summaries: needs_validation has no severity; the public view hides active 
   assert.deepEqual([owner.coverage.checked, owner.coverage.partial, owner.coverage.notRun], [2, 2, 11]);
 
   const pub = summarize(a, 'public');
-  assert.deepEqual(pub.counts, { P0: 1, P1: 0, P2: 1 });
+  // R02 (a leaked key) is not disclosed publicly at all; R14 (headers) is.
+  assert.deepEqual(pub.counts, { P0: 0, P1: 0, P2: 1 });
+  assert.equal(pub.needsValidation, 0);
+  assert.equal(pub.grade, 'B');
   assert.deepEqual([pub.coverage.checked, pub.coverage.partial, pub.coverage.notRun], [1, 2, 12]);
 });
 
