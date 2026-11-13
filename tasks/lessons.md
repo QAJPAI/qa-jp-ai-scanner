@@ -38,3 +38,25 @@ the scanner's own source naming service domains.
 
 - Rule: tests, fixtures, evals and documents are not evidence of use, and
   key-shaped values in them are questions, not leaks.
+
+## "It is gone" has more causes than "it was fixed"
+
+2026-11-13: while writing the comparison, the first design missed one way a
+problem disappears: a comment containing "row level security" makes the SQL
+replay treat RLS as dynamic, which turns a confirmed problem into a question
+with a different code — and the old record looked fixed.
+
+- Rule: before deciding that something disappeared because it was fixed, list
+  every way the check can stop reporting it: the file was not read, the rule was
+  examined less, the tool changed, the item was renamed, or it was downgraded to
+  a weaker verdict. Each needs its own test that fails if the guard is removed.
+
+## Prepare every input before launching an agent
+
+2026-11-13: the fix-loop field test was launched with a prompt naming
+`/tmp/eval-fix/SKILL.md` before the file was copied there. The agent looked
+for it before it was placed and worked without the skill, so the planned run
+(with the skill) became a different one (tool guidance only). It had to be run
+again.
+
+- Rule: create and list every file an agent's prompt names, then launch it.

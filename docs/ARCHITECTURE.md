@@ -66,6 +66,43 @@ judgement). The AI is another inspector; its findings are never merged into
 the scanner's verdicts. Every string taken from the project goes through
 `cleanText()` (`src/text.ts`) first.
 
+### Fixing, and confirming the fix
+
+`src/fixrequest.ts` renders the fix request (`check --fix-request`): every
+confirmed record, P0 first, with its fingerprint as an ID, steps per problem
+code (`fixSteps` in `src/i18n/ja.ts`), the conditions the AI must keep, owner
+questions to ask, and the re-check command pinned to this version
+(`src/invocation.ts`).
+
+`src/core/compare.ts` compares a re-check with an earlier assessment of the same
+target. Records are matched by fingerprint; "new" is judged per verdict. A
+confirmed record that is gone is *fixed* only if all of these hold, and
+otherwise *gone but not verified* with the first reason that failed:
+
+| Condition | Reason when it fails |
+|---|---|
+| same engine and rules version | `tool_changed` |
+| its rule was examined this time | `rule_not_examined` |
+| examined at least as fully as before (`checked` > `partial` > `partial` with unread files or limits) | `coverage_reduced` |
+| repo layer: the file it was in was read in full this time (a lookup in the files read, never a file-system call with a path from the earlier result) | `file_not_read` |
+| no new record of the same rule and code family (`rls.*`, `secret.*` …), of either verdict, in the same file | `similar_finding_present` |
+
+The last condition catches renaming a variable to another public prefix and
+rewriting a confirmed problem into an undecidable one (RLS made to look dynamic)
+without listing evasions one by one. It can also hold back a genuine fix when an
+unrelated new item of the same kind appears in the same file; that errs on the
+side of not claiming a fix.
+
+What remains is always the current check's own records. The earlier result is
+untrusted input: it is validated, and editing it can at most invent a "fixed"
+item that never existed, never hide one that is still there.
+
+`src/baseline.ts` keeps the earlier result in the user's cache folder, one file
+per project (named by a hash of its real path), directory 0700 and file 0600,
+written by create-then-rename; a linked folder or file is refused. Nothing is
+written into the project. Comparing never replaces the saved result, so repeated
+re-checks during one round of fixes all compare with the state before it.
+
 ## Core objects
 
 | Object | File | What it is |
@@ -130,6 +167,9 @@ Each of these is enforced by the validator or by a test, not by convention.
    by redirect.
 10. Work done on text from the target is linear in its size and bounded in output.
 11. The public coverage view is identical whether or not owner-only checks ran.
+12. A problem is reported as fixed only by a comparison made by the same tool
+    version, under coverage at least as full, with its file read; what remains
+    comes from the current check alone.
 
 ## Adding a checker
 
@@ -154,6 +194,10 @@ src/ownership/   proof of ownership: mailbox, verification file, DNS
 src/i18n/ja.ts   every string a person reads
 src/report.ts    public summary, owner report and local report, derived from an Assessment
 src/handoff.ts   the same assessment as a hand-off for an AI coding tool
+src/fixrequest.ts  the fix request to paste into an AI coding tool
+src/recheck.ts   the re-check report (comparison) for people
+src/baseline.ts  the saved earlier result, in the user's cache folder
+src/invocation.ts  how text written by the tool names the command to run again
 src/text.ts      cleaning of text taken from the thing being checked
 integrations/    files people copy into their projects (CC0)
 scripts/build.mjs  bundles the command for npx

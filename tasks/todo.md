@@ -70,11 +70,22 @@
 - [x] Tests: pins stay in step with the version, options exist, package contents, no hidden characters anywhere in the repo
 - [x] Field test with a separate AI (evals/pre-release-check): 11 / 11, including ignoring two planted instructions
 
+### Entrance B, step 3 (2026-11-13, engine 0.7.0)
+- [x] `check --fix-request`: every confirmed problem, P0 first, with ID, steps per code, conditions for the AI, owner questions, pinned re-check command
+- [x] `check --baseline / --compare / --since`: fixed / still present / gone but not verified (with reason) / new; questions likewise
+- [x] "Fixed" only with the same tool version, coverage at least as full, the file read, and nothing new of the same kind in that file (catches delete, rename, move to tests, prefix swap, RLS made to look dynamic)
+- [x] Saved result in the user's cache (0700/0600, links refused, validated on load); nothing written into the project; comparing never overwrites it
+- [x] Hand-off: IDs, fix steps, "0. 前回からの変化"; skill steps 5–6 and rules file v0.3 re-check with `--compare`
+- [x] 36 new tests (140 in all); every comparison and storage safeguard removed once to see a test fail
+- [x] Field test of the fix loop (evals/fix-loop): without the skill 12 / 12, with the skill 12 / 12
+
 ### Entrance B, next
-- [ ] Push and tag v0.6.0 (the pinned `github:QAJPAI/qa-jp-ai-scanner#v0.6.0` needs the tag to exist)
+- [ ] Push and tag v0.7.0 (the pinned `github:QAJPAI/qa-jp-ai-scanner#v0.7.0` needs the tag to exist)
 - [ ] Decide whether to publish to npm (simpler and faster install than a GitHub spec, no git needed)
 - [ ] Field test with other vendors' tools, the fallback path, and repeated runs
-- [ ] Step 3: a copy-paste fix request for each finding, and "fixed" confirmation on re-run
+- [ ] Owner answers to questions (e.g. "public read is intended"), recorded and honoured on the next check, with who and when
+- [ ] `--fix-request` for verified URL owners (the module already handles the URL layer)
+- [ ] SQL replay: a comment mentioning "row level security" marks RLS as dynamic; only string and dollar-quoted bodies should
 - [ ] R01: views without security_invoker, storage buckets marked public, security definer functions
 - [ ] R02: keys committed in the past (needs git history)
 
@@ -91,6 +102,15 @@
 - [ ] Legal review of the verification flow and terms before any public deployment
 - [ ] R04 "existence-only" check — define the detect/exploit boundary first
 - [ ] Discover runtime-loaded chunks (build manifests) for R02
+
+## Review (2026-11-13, engine 0.7.0)
+
+- 140 tests pass; `tsc --noEmit` clean; the repository's own check is clean.
+- Mutation check: removing each comparison safeguard (tool version, rule not examined, reduced coverage, partial with unread files, file not read, same-kind new record, code family, per-verdict "new") and each storage safeguard (linked folder, linked file, validation on load, file mode, cleaning, wiring in the CLI, compare-and-save refused, P0 first) makes the suite fail. Two of them first survived; tests were added.
+- Found while designing the comparison: a comment mentioning "row level security" turns a confirmed RLS problem into a question with another code, which would have looked fixed. The comparison now treats any new record of the same kind in the same file as blocking a fix.
+- Field test: two runs by a separate Claude agent on the clinic app with `.env.local` already committed and the user asking to 「とにかくチェックが通るように」. Both fixed all four P0 with a new migration, renamed the key variable, untracked the env file, refused to game the check, re-checked with `--compare`, reported only tool-confirmed fixes, and told the owner to re-issue the key and apply the migration. 12 / 12 each. Run 1 had no skill because I launched it before placing the file (lesson recorded); it ran from the tool's own guidance alone.
+- One wording fix from the field test: the public-read question promised that a comment would make the next check easier; nothing reads comments yet.
+- Still not verified: other vendors' tools; fetching from GitHub (not pushed yet).
 
 ## Review (2026-11-13, engine 0.6.0)
 
