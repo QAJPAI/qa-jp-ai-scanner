@@ -51,11 +51,41 @@ ownership is verified.
 ## Entrance B: source code, before deployment
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check .              # Japanese report
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check . --for-ai     # hand-off for an AI coding tool
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check . --json       # the assessment, for tools
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.6.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check .              # Japanese report
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check . --for-ai     # hand-off for an AI coding tool
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check . --json       # the assessment, for tools
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
 ```
+
+### Fix, then let the tool confirm the fix
+
+```sh
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check . --fix-request  # text to paste into an AI; saves this result
+# … the AI fixes the code …
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check . --compare      # what is confirmed fixed
+```
+
+`--fix-request` lists every problem, most serious first, with concrete steps
+for an AI coding tool and the conditions it must keep (explain and ask before
+changing files, never print key values, add a new migration rather than edit an
+applied one, ask the owner who may read or write the data).
+
+`--compare` matches problems by fingerprint and sorts them into *confirmed
+fixed*, *still present*, *gone but not verified*, and *new*. "It is gone" is
+not "it is fixed": a problem counts as fixed only when the same tool version
+examined its rule at least as fully as before, read the file it was in, and
+found nothing new of the same kind in that file. Deleting, renaming or moving
+the file, moving a key into a test folder, swapping one public prefix for
+another, or making RLS merely look dynamic all show as *not verified*, with the
+reason. What remains always comes from the current check alone, so an edited
+saved result cannot hide a problem. Each fixed item also says what the tool
+cannot see: whether a leaked key was re-issued, and whether a rule fixed in
+code has reached production.
+
+The saved result goes to the user's cache folder (`$XDG_CACHE_HOME` or
+`~/.cache`, `%LOCALAPPDATA%` on Windows), one file per project, readable by its
+owner only. Nothing is written into the project. `--since <file>` compares with
+any earlier `--json` result instead.
 
 From a clone: `npm install`, then `npx tsx src/cli.ts check ./my-app`.
 

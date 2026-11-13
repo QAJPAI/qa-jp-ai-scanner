@@ -16,7 +16,8 @@ import { scanRepo } from '../src/repo/scan';
 const root = new URL('..', import.meta.url).pathname;
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
 const pkg = JSON.parse(read('package.json')) as { version: string; name: string; files: string[]; bin: Record<string, string> };
-const PINNED = `npx --yes github:QAJPAI/qa-jp-ai-scanner#v${pkg.version} check . --for-ai`;
+const PINNED = `npx --yes github:QAJPAI/qa-jp-ai-scanner#v${pkg.version} check . --for-ai --baseline`;
+const RECHECK = `npx --yes github:QAJPAI/qa-jp-ai-scanner#v${pkg.version} check . --compare --for-ai`;
 
 const SKILL_PATH = 'integrations/claude-code/skills/qa-jp-ai-pre-release-check/SKILL.md';
 const skill = read(SKILL_PATH);
@@ -26,6 +27,8 @@ const guide = read('integrations/README.ja.md');
 test('every copyable file pins the current version of the tool', () => {
   assert.ok(skill.includes(PINNED), 'SKILL.md');
   assert.ok(rules.includes(PINNED), 'rules file');
+  assert.ok(skill.includes(RECHECK), 'SKILL.md re-check');
+  assert.ok(rules.includes(RECHECK), 'rules file re-check');
   assert.ok(guide.includes(`github:QAJPAI/qa-jp-ai-scanner#v${pkg.version}`), 'guide');
   for (const text of [skill, rules, guide]) {
     const pins = text.match(/qa-jp-ai-scanner#v[0-9.]+/g) ?? [];
@@ -55,15 +58,27 @@ test('the skill keeps the tool, the owner and the AI apart, and forbids what mus
     '検査を通すためだけの変更',
     '発行元でキーを無効化して再発行する必要がある',
     'ツールによる検査は行えませんでした',
+    // The fix loop: only what the tool confirmed is reported as fixed.
+    '「**修正を確認しました**」と表示された項目だけを、修正済みと伝えてください',
+    '「**修正とは確認できません**」と表示された項目は、修正済みと伝えないでください',
+    '新しいファイルを追加して直してください',
+    '保存された前回の結果（キャッシュフォルダーのファイル）を、編集・削除しないでください',
   ]) {
     assert.ok(skill.includes(phrase), phrase);
+  }
+  for (const phrase of ['「修正を確認しました」と表示された項目だけを修正済みと伝えてください', '検査を通すためだけの変更は修正ではありません']) {
+    assert.ok(rules.includes(phrase), phrase);
   }
 });
 
 test('the commands and options the copyable files mention exist in the tool', () => {
   const usage = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', '--help'], { cwd: root, encoding: 'utf8' });
   assert.equal(usage.status, 0);
-  for (const option of ['check', '--for-ai', '--fail-on', '--json']) assert.ok(usage.stdout.includes(option), option);
+  // Every option the copyable files mention, not a list kept by hand.
+  const mentioned = new Set([skill, rules, guide].flatMap((text) => text.match(/(?<![\w-])--[a-z][a-z-]*/g) ?? []));
+  mentioned.delete('--yes'); // npx's own option
+  for (const option of ['--for-ai', '--baseline', '--compare', '--fix-request']) assert.ok(mentioned.has(option), option);
+  for (const option of mentioned) assert.ok(usage.stdout.includes(option), `${option} is not an option of the tool`);
   assert.equal(pkg.bin['qa-scan'], 'dist/qa-scan.mjs');
   assert.ok(skill.includes('qa-scan check . --for-ai'));
 });

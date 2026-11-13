@@ -26,6 +26,16 @@ export interface RepoScanOptions extends LoadOptions {
 }
 
 export async function scanRepo(root: string, options: RepoScanOptions = {}): Promise<Assessment> {
+  return (await inspectRepo(root, options)).assessment;
+}
+
+export interface RepoInspection {
+  assessment: Assessment;
+  /** Project-relative paths of the files read in full. Used to compare with an earlier check. */
+  filesRead: ReadonlySet<string>;
+}
+
+export async function inspectRepo(root: string, options: RepoScanOptions = {}): Promise<RepoInspection> {
   const now = options.now ?? Date.now;
   const ctx = await loadRepo(root, options);
 
@@ -49,7 +59,7 @@ export async function scanRepo(root: string, options: RepoScanOptions = {}): Pro
     }
   }
 
-  return {
+  const assessment: Assessment = {
     schema: ASSESSMENT_SCHEMA,
     engineVersion: ENGINE_VERSION,
     rulesVersion: RULES_VERSION,
@@ -59,4 +69,5 @@ export async function scanRepo(root: string, options: RepoScanOptions = {}): Pro
     records: dedupeByFingerprint(records),
     coverage: buildLedger('repo', ran, deferred),
   };
+  return { assessment, filesRead: new Set(ctx.files.map((f) => f.path)) };
 }

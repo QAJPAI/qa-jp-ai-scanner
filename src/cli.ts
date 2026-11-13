@@ -3,15 +3,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { readFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { BaselineError, loadBaseline, readAssessmentFile, saveBaseline } from './baseline';
+import type { Assessment } from './core/assessment';
+import { compareAssessments, ComparisonError, type Comparison } from './core/compare';
 import { SEVERITIES, type Severity } from './core/types';
 import { validateAssessment } from './core/validate';
+import { renderFixRequest } from './fixrequest';
 import { renderHandoff } from './handoff';
-import { ownership as ownershipText, scanErrorText } from './i18n/ja';
+import { comparison as comparisonText, fixRequest as fixRequestText, ownership as ownershipText, scanErrorText } from './i18n/ja';
 import { dnsRecordName, verifyByDns } from './ownership/dns';
 import { verifyByFile } from './ownership/file';
 import { ownershipSubject, type OwnershipProof } from './ownership/proof';
 import { mintVerificationToken } from './ownership/token';
-import { scanRepo } from './repo/scan';
+import { inspectRepo } from './repo/scan';
+import { renderComparison } from './recheck';
 import { renderLocalReport, renderOwnerReport, renderPublicSummary } from './report';
 import { closeAgents } from './url/net/fetcher';
 import { BlockedAddressError } from './url/net/guard';
@@ -20,6 +25,10 @@ import { normalizeTarget, ScanError, scanOwner, scanPublic } from './url/scan';
 const USAGE = `Usage:
   qa-scan check [folder]                         Pre-deployment check of your own source code (default: current folder)
       --for-ai                                   Output a hand-off for an AI coding tool instead of the report
+      --fix-request                              Output a fix request to paste into an AI coding tool (saves the result)
+      --baseline                                 Save this result, to compare with after fixing
+      --compare                                  Compare with the saved result: which problems are confirmed fixed
+      --since <assessment.json>                  Compare with this earlier result instead of the saved one
       --fail-on P0|P1|P2                         Exit with code 3 if a confirmed problem of this level or worse is found
   qa-scan <url>                                  Public summary (passive checks only)
   qa-scan token <url> --account <id>             Show the ownership token and how to place it
@@ -27,6 +36,8 @@ const USAGE = `Usage:
   qa-scan validate <assessment.json>             Check that an assessment is well-formed and consistent
 
 Exit codes: 0 done, 1 error, 2 usage, 3 problems found at the --fail-on level.
+
+Saved results go to the user's cache folder (never into the project), one per project.
 
 Options:
   --json   Print machine-readable output. Without verification this is the public
@@ -65,6 +76,85 @@ function validateFile(path: string): number {
   return 1;
 }
 
+interface CheckFlags {
+  json?: boolean;
+  'for-ai'?: boolean;
+  'fail-on'?: string;
+  'fix-request'?: boolean;
+  baseline?: boolean;
+  compare?: boolean;
+  since?: string;
+}
+
+/** The earlier result to compare with, or a message saying why there is none. */
+function previousResult(folder: string, since: string | undefined): Assessment | string {
+  try {
+    return since ? readAssessmentFile(since) : loadBaseline(folder);
+  } catch (err) {
+    if (!(err instanceof BaselineError)) throw err;
+    if (since) return err.code === 'not_found' ? comparisonText.sinceNotFound : comparisonText.invalidBaseline;
+    return err.code === 'not_found' ? comparisonText.noBaseline : comparisonText.invalidBaseline;
+  }
+}
+
+async function check(folder: string, values: CheckFlags): Promise<number> {
+  const failOn = values['fail-on']?.toUpperCase();
+  if (failOn !== undefined && !(SEVERITIES as readonly string[]).includes(failOn)) {
+    console.error('--fail-on must be P0, P1 or P2');
+    return 2;
+  }
+  const formats = [values.json, values['for-ai'], values['fix-request']].filter(Boolean).length;
+  const comparing = Boolean(values.compare || values.since);
+  if (formats > 1 || (values.compare && values.since) || (comparing && (values.baseline || values['fix-request']))) {
+    console.error('Choose one of --json, --for-ai, --fix-request; --compare/--since cannot be combined with saving.');
+    return 2;
+  }
+
+  // Reads files only: no code is run and nothing is sent anywhere.
+  const { assessment, filesRead } = await inspectRepo(folder);
+
+  let comparison: Comparison | undefined;
+  if (comparing) {
+    const previous = previousResult(folder, values.since);
+    if (typeof previous === 'string') {
+      console.error(previous);
+      return 1;
+    }
+    try {
+      comparison = compareAssessments(previous, assessment, { wasRead: (path) => filesRead.has(path) });
+    } catch (err) {
+      if (!(err instanceof ComparisonError)) throw err;
+      console.error(comparisonText.differentTarget);
+      return 1;
+    }
+  }
+
+  const save = Boolean(values.baseline || values['fix-request']);
+  if (save) {
+    try {
+      saveBaseline(folder, assessment);
+    } catch (err) {
+      console.error(err instanceof BaselineError ? comparisonText.unsafeLocation : String(err));
+      return 1;
+    }
+    // On stderr, so the text meant for the AI stays clean on stdout.
+    console.error(fixRequestText.savedNote);
+  }
+
+  if (values.json) console.log(JSON.stringify(comparison ? { comparison, assessment } : assessment, null, 2));
+  else if (values['fix-request']) console.log(renderFixRequest(assessment));
+  else if (values['for-ai']) console.log(renderHandoff(assessment, { comparison, baselineSaved: save }));
+  else if (comparison) console.log(renderComparison(comparison, assessment));
+  else console.log(renderLocalReport(assessment));
+
+  if (failOn) {
+    const threshold = SEVERITIES.indexOf(failOn as Severity);
+    const hit = assessment.records.some((r) => r.verdict === 'confirmed' && SEVERITIES.indexOf(r.severity) <= threshold);
+    if (hit) return 3;
+  }
+  return 0;
+}
+
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -74,6 +164,10 @@ async function main(): Promise<number> {
       json: { type: 'boolean' },
       'for-ai': { type: 'boolean' },
       'fail-on': { type: 'string' },
+      'fix-request': { type: 'boolean' },
+      baseline: { type: 'boolean' },
+      compare: { type: 'boolean' },
+      since: { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -91,27 +185,7 @@ async function main(): Promise<number> {
     return validateFile(positionals[1]);
   }
 
-  if (positionals[0] === 'check') {
-    const failOn = values['fail-on']?.toUpperCase();
-    if (failOn !== undefined && !(SEVERITIES as readonly string[]).includes(failOn)) {
-      console.error('--fail-on must be P0, P1 or P2');
-      return 2;
-    }
-    // Reads files only: no code is run and nothing is sent anywhere.
-    const assessment = await scanRepo(positionals[1] ?? '.');
-    if (values.json) console.log(JSON.stringify(assessment, null, 2));
-    else if (values['for-ai']) console.log(renderHandoff(assessment));
-    else console.log(renderLocalReport(assessment));
-
-    if (failOn) {
-      const threshold = SEVERITIES.indexOf(failOn as Severity);
-      const hit = assessment.records.some(
-        (r) => r.verdict === 'confirmed' && SEVERITIES.indexOf(r.severity) <= threshold,
-      );
-      if (hit) return 3;
-    }
-    return 0;
-  }
+  if (positionals[0] === 'check') return check(positionals[1] ?? '.', values);
 
   if (positionals[0] === 'token') {
     const input = positionals[1];

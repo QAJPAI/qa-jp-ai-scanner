@@ -167,7 +167,9 @@ export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof,
  */
 export function renderLocalReport(assessment: Assessment): string {
   if (assessment.target.layer !== 'repo') throw new Error('Local report is for source-code checks only');
-  return renderDetails(assessment, localHeader, t.checksLocal, t.needsValidationHeadingLocal);
+  const text = renderDetails(assessment, localHeader, t.checksLocal, t.needsValidationHeadingLocal);
+  const hasProblems = assessment.records.some((r) => r.verdict === 'confirmed');
+  return hasProblems ? `${text}\n\n${t.fixRequestHint}` : text;
 }
 
 function localHeader(s: OwnerSummary): string[] {
