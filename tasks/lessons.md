@@ -64,3 +64,7 @@ again.
 ## A negative from a lookup is only as good as the resolver (2026-11-20)
 - The sandbox resolver answered "no data" to every TXT question, so github.com was told it had no DMARC. A filtered corporate resolver can do the same in production.
 - Rule: before publishing "X is missing", run a positive control that a working source always passes (NS records for a live domain). If the control fails, record "could not check", never "missing".
+
+## DMARC p=reject reaches subdomains (2026-11-20)
+- I told the user to set `p=reject` on jp.ai because "jp.ai sends no mail". His main mailbox is on email.jp.ai; p=reject is inherited by subdomains (sp defaults to p), and his outgoing mail was rejected.
+- Rule: before advising any DNS change that can stop mail, ask which domains AND subdomains send mail. Default to `p=none` first, or `sp=none` when subdomains are in use. Changes that can break someone's mail are not "a few minutes, done".

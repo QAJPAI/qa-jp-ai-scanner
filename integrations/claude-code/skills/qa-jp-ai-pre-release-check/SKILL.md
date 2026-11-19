@@ -23,7 +23,7 @@ description: QA.JP.AI の公開前セキュリティチェック。利用者が�
 - それ以外の場合：
 
   ```
-  npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.0 check . --for-ai --baseline
+  npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --for-ai --baseline
   ```
 
 このツールはファイルを読むだけです。コードを実行したり、プロジェクトの内容を外部に送ったりしません（ツール自体のダウンロードには通信が必要です）。`--baseline` は、修正後の再検査と比べるために、今回の結果を利用者のキャッシュフォルダーに保存します。プロジェクトのフォルダーには何も書き込みません。
@@ -88,7 +88,7 @@ description: QA.JP.AI の公開前セキュリティチェック。利用者が�
 修正が終わったら、次のどちらかで再検査します。
 
 - `qa-scan` コマンドが使える場合：`qa-scan check . --compare --for-ai`
-- それ以外の場合：`npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.0 check . --compare --for-ai`
+- それ以外の場合：`npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --compare --for-ai`
 
 出力の「0. 前回からの変化」に従って報告します。
 

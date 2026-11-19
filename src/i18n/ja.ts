@@ -96,7 +96,7 @@ export const findingText: Record<string, FindingText> = {
   },
   'email.dmarc_missing': {
     title: 'なりすましメールを防ぐ設定（DMARC）がありません',
-    fix: 'このドメインを名乗る偽のメール（なりすましメール）を誰でも送ることができ、受け取った側はそれが偽物だと見分けられません。取引先やお客様がだまされると、会社の信用に関わります。DNS に `_dmarc.ドメイン名` の TXT レコードを追加してください（例: `v=DMARC1; p=none; rua=mailto:dmarc@ドメイン名`）。まず p=none で届いたレポートを確認し、問題がなければ p=quarantine または p=reject に強めます。メールを送らないドメインでも、`v=DMARC1; p=reject;` を設定すると悪用を防げます。',
+    fix: 'このドメインを名乗る偽のメール（なりすましメール）を誰でも送ることができ、受け取った側はそれが偽物だと見分けられません。取引先やお客様がだまされると、会社の信用に関わります。DNS に `_dmarc.ドメイン名` の TXT レコードを追加してください（例: `v=DMARC1; p=none; rua=mailto:dmarc@ドメイン名`）。まず p=none で届いたレポートを確認し、問題がなければ p=quarantine または p=reject に強めます。メールを送らないドメインでも、`v=DMARC1; p=reject;` を設定すると悪用を防げます。ただし DMARC はサブドメインにも適用されます。サブドメイン（例: `mail.ドメイン名`）でメールを使っている場合は、先に p=none で確かめるか、`sp=none` を付けてサブドメインを対象外にしてください。そのまま p=reject にすると、サブドメインから送った正規のメールが受け取りを拒否されることがあります。',
   },
   'email.dmarc_monitor_only': {
     title: 'なりすましメールを防ぐ設定（DMARC）が「監視のみ」になっています',

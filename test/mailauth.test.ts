@@ -103,6 +103,12 @@ test('which domain: the registrable one; none for IPs and hosting platforms', ()
   assert.equal(mailDomainFor('my-app.vercel.app'), undefined);
 });
 
+test('the DMARC advice warns that p=reject also covers subdomains', () => {
+  const fix = findingTextFor('url', 'email.dmarc_missing')!.fix;
+  assert.match(fix, /サブドメイン/);
+  assert.match(fix, /sp=none/);
+});
+
 test('SPF and DMARC parsing details', () => {
   assert.equal(spfAll('v=spf1 -all'), '-');
   assert.equal(spfAll('v=spf1 include:a ~ALL'), '~');
