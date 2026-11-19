@@ -1,5 +1,6 @@
 // Copyright (C) 2026 iQi
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import type { MailAuthFacts } from './mailauth';
 import type { FetchOptions, FetchResult } from './net/fetcher';
 
 /** A text the site serves to every visitor: the page or one of its scripts. */
@@ -45,6 +46,12 @@ export interface UrlContext {
   load: LoadStats;
   /** Whether http:// redirects to https://; undefined when not probed. */
   httpRedirectsToHttps?: boolean;
+  /**
+   * SPF / DMARC of the site's domain from public DNS; 'not_applicable' where
+   * the owner cannot set DNS (IP address, hosting platform subdomain);
+   * undefined when not looked up (out of time).
+   */
+  mailAuth?: MailAuthFacts | 'not_applicable';
   /** Options active checkers must use for any request they make. Carries the scan deadline. */
   fetch: FetchOptions;
   /** True once the scan's time budget is spent: make no further requests. */

@@ -94,6 +94,30 @@ export const findingText: Record<string, FindingText> = {
     title: 'HTTP でのアクセスが HTTPS に自動転送されていません',
     fix: 'http:// でアクセスした利用者が暗号化されないまま通信してしまいます。HTTP から HTTPS への自動転送を設定してください。',
   },
+  'email.dmarc_missing': {
+    title: 'なりすましメールを防ぐ設定（DMARC）がありません',
+    fix: 'このドメインを名乗る偽のメール（なりすましメール）を誰でも送ることができ、受け取った側はそれが偽物だと見分けられません。取引先やお客様がだまされると、会社の信用に関わります。DNS に `_dmarc.ドメイン名` の TXT レコードを追加してください（例: `v=DMARC1; p=none; rua=mailto:dmarc@ドメイン名`）。まず p=none で届いたレポートを確認し、問題がなければ p=quarantine または p=reject に強めます。メールを送らないドメインでも、`v=DMARC1; p=reject;` を設定すると悪用を防げます。',
+  },
+  'email.dmarc_monitor_only': {
+    title: 'なりすましメールを防ぐ設定（DMARC）が「監視のみ」になっています',
+    fix: 'DMARC が p=none のため、このドメインを名乗る偽のメールが届いても、受け取った側で止められません。届いたレポートで正規のメールが SPF・DKIM に合格していることを確認したうえで、p=quarantine または p=reject に変更してください。',
+  },
+  'email.spf_missing': {
+    title: 'メールの送信元を示す設定（SPF）がありません',
+    fix: 'このドメインのメールを送ってよいサーバーが示されていないため、なりすましメールを見分ける手がかりが減り、正規のメールも迷惑メールと判定されやすくなります。お使いのメールサービスの案内に従って、DNS に SPF レコードを追加してください（例: Google Workspace なら `v=spf1 include:_spf.google.com ~all`）。メールを送らないドメインなら `v=spf1 -all` を設定します。',
+  },
+  'email.spf_multiple': {
+    title: 'メールの送信元を示す設定（SPF）が複数あり、無効になっています',
+    fix: 'SPF のレコードは 1 つにまとめる必要があります。2 つ以上あると、受け取った側ではすべて無効として扱われ、なりすましメールを見分けられません。include をまとめて、v=spf1 で始まるレコードを 1 つにしてください。',
+  },
+  'email.spf_allows_all': {
+    title: 'メールの送信元を示す設定（SPF）が、すべての送信元を許可しています',
+    fix: 'SPF が +all（または all）で終わっているため、どこから送られたメールでも、このドメインの正規のメールとして扱われます。誰でもこのドメインを名乗ってメールを送れる状態です。末尾を -all（推奨）または ~all に変更してください。',
+  },
+  'email.spf_neutral': {
+    title: 'メールの送信元を示す設定（SPF）が、送信元以外を拒否していません',
+    fix: 'SPF が ?all で終わっているか、all の指定がないため、指定外のサーバーから送られたメールも「判断しない」扱いになります。なりすましメールを止める効果がほとんどありません。末尾を -all（推奨）または ~all に変更してください。',
+  },
   'header.hsts_missing': {
     title: 'HSTS（Strict-Transport-Security）ヘッダーが設定されていません',
     fix: 'ブラウザーに常に HTTPS で接続させるための設定です。レスポンスヘッダーに Strict-Transport-Security を追加してください。',
@@ -409,7 +433,7 @@ export const ruleTitle: Record<RuleId, string> = {
   R11: '内部ファイル・デバッグ情報の露出',
   R12: 'LLM が入力によって権限外の操作をさせられる',
   R13: 'AI エージェントの権限が広すぎる・停止手段がない',
-  R14: '通信の暗号化とレスポンスヘッダー',
+  R14: '基本設定（通信の暗号化、レスポンスヘッダー、メールの送信ドメイン認証）',
   R15: 'ログの取り扱い',
 };
 
@@ -432,7 +456,7 @@ export const ruleReviewFocus: Record<RuleId, string> = {
   R11: '.env・.git・バックアップ・ソースマップが公開されるフォルダーに入っていないか。エラー画面に内部の情報を出していないか',
   R12: 'LLM に渡す利用者の入力や外部の文章を、指示として扱っていないか。LLM が行う操作の可否をコードで確認しているか',
   R13: 'AI エージェントの権限が最小限か。取り消せない操作の前に人の確認があり、停止手段と回数・費用の上限があるか',
-  R14: '本番が HTTPS のみで提供されるか。セキュリティヘッダーと、ログイン用 Cookie の属性を設定しているか',
+  R14: '本番が HTTPS のみで提供されるか。セキュリティヘッダーと、ログイン用 Cookie の属性を設定しているか。メールを送るドメインに SPF と DMARC が設定されているか（DNS の設定のため、AI からは変更できないことが多い）',
   R15: 'ログにパスワード・キー・個人情報を書いていないか。ログインや削除などの重要な操作を記録しているか',
 };
 
@@ -534,6 +558,14 @@ export const evidence = {
     `先頭「${prefix}」で始まる ${length} 文字の文字列（全体は記録していません）`,
   privateKeyHeader: () => 'PRIVATE KEY のヘッダー行を検出（鍵の本体は記録していません）',
   missingHeader: (name: string) => `レスポンスヘッダー ${name} がありません`,
+  spfMissing: (domain: string) => `${domain} の TXT レコードに、SPF（v=spf1）がありません`,
+  spfMultiple: (count: number) => `SPF のレコードが ${count} 件あります（2 件以上あると、すべて無効として扱われます）`,
+  spfRecord: (record: string) => `SPF レコード: ${record}`,
+  dmarcMissing: (domain: string, count: number) =>
+    count === 0
+      ? `_dmarc.${domain} に、DMARC（v=DMARC1）のレコードがありません`
+      : `_dmarc.${domain} に DMARC のレコードが ${count} 件あります（2 件以上あると、無効として扱われます）`,
+  dmarcRecord: (record: string) => `DMARC レコード: ${record}`,
   finalUrlNotHttps: () => '最終的に表示された URL が http:// です',
   httpNotRedirected: () => 'http:// でのアクセスが https:// に転送されませんでした',
   cookieMissingAttrs: (attrs: string[]) => `不足している属性: ${attrs.join('、')}`,
@@ -555,8 +587,8 @@ export const report = {
   grade: '総合評価',
   counts: '優先度別の件数',
   countUnit: '件',
-  checksPublic: '実施した検査: 通常のページ表示と同等のアクセスのみ',
-  checksOwner: '実施した検査: 通常のページ表示と同等のアクセス、および所有者確認後にのみ行う検査',
+  checksPublic: '実施した検査: 通常のページ表示と同等のアクセスと、DNS に公開されている情報（メールの送信ドメイン認証）の確認のみ',
+  checksOwner: '実施した検査: 通常のページ表示と同等のアクセス、DNS に公開されている情報の確認、および所有者確認後にのみ行う検査',
   basicGrade: '基本設定の評価',
   basicCounts: '基本設定の件数',
   seriousGated:

@@ -3,6 +3,7 @@
 import type { Assessment } from '../core/assessment';
 import type { Checker } from '../core/checker';
 import { buildLedger, type CheckerCoverage, type DeferredRule } from '../core/coverage';
+import { lookUpMailAuth, type MailDns, mailDomainFor } from './mailauth';
 import { dedupeByFingerprint, recordFactory, type AssessmentRecord } from '../core/records';
 import { ASSESSMENT_SCHEMA, ENGINE_VERSION, RULES_VERSION, type Tier } from '../core/types';
 import { domainInfo, proofCovers, type OwnershipProof } from '../ownership/proof';
@@ -32,6 +33,8 @@ export interface ScanOptions {
   now?: () => number;
   /** Override the checker set (tests, experiments). */
   checkers?: readonly Checker<UrlContext>[];
+  /** DNS lookups for mail authentication (tests pass their own). */
+  mailDns?: MailDns;
   /**
    * Owner tier only: false keeps active checks from running even for a
    * verified owner (a service's off switch). The ledger then says so; it
@@ -206,6 +209,7 @@ async function loadContext(
   fetchOptions: FetchOptions,
   maxScripts: number,
   outOfTime: () => boolean,
+  mailDns: MailDns | undefined,
 ): Promise<UrlContext> {
   const page = await safeFetch(target.href, fetchOptions);
   const finalUrl = new URL(page.finalUrl);
@@ -252,9 +256,17 @@ async function loadContext(
     }
   }
 
+  const mailDomain = mailDomainFor(finalUrl.hostname);
+  const mailAuth: UrlContext['mailAuth'] = !mailDomain
+    ? 'not_applicable'
+    : outOfTime()
+      ? undefined
+      : await lookUpMailAuth(mailDomain, mailDns);
+
   return {
     page,
     finalUrl,
+    mailAuth,
     scripts,
     texts: [{ url: page.finalUrl, body: page.body }, ...scripts],
     load,
@@ -292,7 +304,7 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
   // Every request of this scan, including active probes, shares one deadline.
   const fetchOptions: FetchOptions = { ...options.fetch, deadlineAt: startedMs + Math.max(budgetMs, 1) };
 
-  const ctx = await loadContext(target, fetchOptions, options.maxScripts ?? DEFAULT_MAX_SCRIPTS, outOfTime);
+  const ctx = await loadContext(target, fetchOptions, options.maxScripts ?? DEFAULT_MAX_SCRIPTS, outOfTime, options.mailDns);
 
   // The proof must cover the host that was actually reached, not only the one
   // that was typed: example.jp may answer as www.example.jp.

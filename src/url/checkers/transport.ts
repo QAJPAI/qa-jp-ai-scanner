@@ -5,13 +5,16 @@ import type { ConfirmedRecord, RecordFactory } from '../../core/records';
 import type { Severity } from '../../core/types';
 import { evidence } from '../../i18n/ja';
 import type { UrlContext } from '../context';
+import { dmarcPolicy, type MailAuthFacts, recordsOf, spfAll } from '../mailauth';
 
 /**
- * R14 — transport and response-header basics.
- * Passive: reads only the headers of the page a visitor would load.
+ * R14 — basic configuration: transport, response headers, and the mail
+ * authentication of the site's domain.
+ * Passive: reads the headers of the page a visitor would load, and public DNS.
  *
- * Missing headers are hardening advice (P2), not vulnerabilities. Only the
- * absence of encryption itself is graded P1.
+ * Missing headers are hardening advice (P2), not vulnerabilities. P1 is for the
+ * absence of encryption, and for a domain anyone can send forged mail as
+ * (no DMARC, or SPF that allows every sender).
  */
 
 export interface TransportInput {
@@ -21,6 +24,8 @@ export interface TransportInput {
   httpRedirectsToHttps?: boolean;
   /** Page HTML, to recognise a policy delivered by a <meta> element. */
   html?: string;
+  /** SPF / DMARC lookups for the site's domain; omitted where they do not apply. */
+  mailAuth?: MailAuthFacts;
 }
 
 const MAX_COOKIES = 50;
@@ -97,7 +102,42 @@ export function checkTransport(input: TransportInput, make: RecordFactory): Conf
     }
   }
 
+  if (input.mailAuth) checkMailAuth(input.mailAuth, add);
   return found;
+}
+
+/** Findings for one domain's SPF and DMARC. Lookups that got no answer produce none. */
+function checkMailAuth(
+  facts: MailAuthFacts,
+  add: (code: string, ev: string, severity: Severity, location: string, key: string) => void,
+): void {
+  const { domain } = facts;
+  const spfAt = `DNS: ${domain}（TXT）`;
+  const dmarcAt = `DNS: _dmarc.${domain}（TXT）`;
+
+  if (facts.spf.status !== 'failed') {
+    const spf = recordsOf(facts.spf, 'v=spf1');
+    if (spf.length === 0) add('email.spf_missing', evidence.spfMissing(domain), 'P2', spfAt, `spf:${domain}`);
+    else if (spf.length > 1) add('email.spf_multiple', evidence.spfMultiple(spf.length), 'P2', spfAt, `spf:${domain}`);
+    else {
+      const all = spfAll(spf[0]!);
+      if (all === '+') add('email.spf_allows_all', evidence.spfRecord(spf[0]!), 'P1', spfAt, `spf:${domain}`);
+      else if (all === '?' || all === 'none') add('email.spf_neutral', evidence.spfRecord(spf[0]!), 'P2', spfAt, `spf:${domain}`);
+    }
+  }
+
+  if (facts.dmarc.status !== 'failed') {
+    const dmarc = recordsOf(facts.dmarc, 'v=DMARC1');
+    // More than one record counts as none (RFC 7489).
+    if (dmarc.length !== 1) {
+      add('email.dmarc_missing', evidence.dmarcMissing(domain, dmarc.length), 'P1', dmarcAt, `dmarc:${domain}`);
+    } else {
+      const policy = dmarcPolicy(dmarc[0]!);
+      if (policy !== 'quarantine' && policy !== 'reject') {
+        add('email.dmarc_monitor_only', evidence.dmarcRecord(dmarc[0]!), 'P2', dmarcAt, `dmarc:${domain}`);
+      }
+    }
+  }
 }
 
 export const transportChecker: Checker<UrlContext> = {
@@ -113,10 +153,16 @@ export const transportChecker: Checker<UrlContext> = {
           headers: ctx.page.headers,
           httpRedirectsToHttps: ctx.httpRedirectsToHttps,
           html: ctx.page.body,
+          mailAuth: ctx.mailAuth === 'not_applicable' ? undefined : ctx.mailAuth,
         },
         make,
       ),
-      coverage: [{ ruleId: 'R14', status: 'checked' }],
+      // A DNS lookup that got no answer (or never ran for lack of time) leaves the rule partly examined.
+      coverage: [
+        ctx.mailAuth === undefined || (ctx.mailAuth !== 'not_applicable' && (ctx.mailAuth.spf.status === 'failed' || ctx.mailAuth.dmarc.status === 'failed'))
+          ? { ruleId: 'R14', status: 'partial', note: 'some_probes_failed' }
+          : { ruleId: 'R14', status: 'checked' },
+      ],
     };
   },
 };

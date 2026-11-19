@@ -60,3 +60,7 @@ for it before it was placed and worked without the skill, so the planned run
 again.
 
 - Rule: create and list every file an agent's prompt names, then launch it.
+
+## A negative from a lookup is only as good as the resolver (2026-11-20)
+- The sandbox resolver answered "no data" to every TXT question, so github.com was told it had no DMARC. A filtered corporate resolver can do the same in production.
+- Rule: before publishing "X is missing", run a positive control that a working source always passes (NS records for a live domain). If the control fails, record "could not check", never "missing".

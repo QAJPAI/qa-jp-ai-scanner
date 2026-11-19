@@ -148,7 +148,7 @@ test('a typical AI-built Supabase app: every classic mistake is found, and nothi
   assert.match(report, /Stripe の本番用シークレットキーがソースコードに直接書かれています/);
   assert.match(report, /変数名 VITE_OPENAI_API_KEY/);
   assert.match(report, /意図した設定かどうかは、所有者の方にしか判断できません/);
-  assert.match(report, /R14 通信の暗号化とレスポンスヘッダー: 未検査（公開されたサイトの検査（URL 検査）で確認します）/);
+  assert.match(report, /R14 基本設定（通信の暗号化、レスポンスヘッダー、メールの送信ドメイン認証）: 未検査（公開されたサイトの検査（URL 検査）で確認します）/);
 
   // A source-code result is not a URL result: the URL renderer refuses it.
   assert.throws(() => renderOwnerReport(a, undefined as never));

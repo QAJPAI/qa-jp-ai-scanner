@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /** Version of the published rule set an assessment was made against. */
-export const RULES_VERSION = '0.1.0';
-export const ENGINE_VERSION = '0.9.0';
+export const RULES_VERSION = '0.2.0';
+export const ENGINE_VERSION = '0.10.0';
 export const ASSESSMENT_SCHEMA = 'qa-jp-ai/assessment@1';
 
 export type Severity = 'P0' | 'P1' | 'P2';
