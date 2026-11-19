@@ -51,18 +51,18 @@ ownership is verified.
 ## Entrance B: source code, before deployment
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check .              # Japanese report
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check . --for-ai     # hand-off for an AI coding tool
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check . --json       # the assessment, for tools
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.9.0 check .              # Japanese report
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.9.0 check . --for-ai     # hand-off for an AI coding tool
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.9.0 check . --json       # the assessment, for tools
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.9.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
 ```
 
 ### Fix, then let the tool confirm the fix
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check . --fix-request  # text to paste into an AI; saves this result
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.9.0 check . --fix-request  # text to paste into an AI; saves this result
 # … the AI fixes the code …
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check . --compare      # what is confirmed fixed
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.9.0 check . --compare      # what is confirmed fixed
 ```
 
 `--fix-request` lists every problem, most serious first, with concrete steps

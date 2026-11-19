@@ -40,6 +40,27 @@ export function issueProof(
   });
 }
 
+/**
+ * Internal: rebuild a proof that was sealed by this engine (seal.ts), with its
+ * original times. Never extends a proof's life.
+ */
+export function restoreProof(
+  method: ProofMethod,
+  scope: 'host' | 'domain',
+  subject: string,
+  verifiedAt: number,
+  expiresAt: number,
+): OwnershipProof {
+  return Object.freeze({
+    [BRAND]: true as const,
+    method,
+    scope,
+    subject: subject.toLowerCase(),
+    verifiedAt,
+    expiresAt,
+  });
+}
+
 export interface DomainInfo {
   hostname: string;
   /** Registrable domain, treating hosting platforms (vercel.app …) as suffixes. */

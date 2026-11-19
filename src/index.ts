@@ -27,7 +27,8 @@ export { evaluateEmailOwnership, issueEmailProofAfterLinkClick, type EmailDecisi
 export { verifyByFile, WELL_KNOWN_PATH } from './ownership/file';
 export { verifyByDns, dnsRecordName } from './ownership/dns';
 export { mintVerificationToken } from './ownership/token';
-export { ownershipSubject, type OwnershipProof } from './ownership/proof';
+export { ownershipSubject, proofCovers, PROOF_TTL_MS, type OwnershipProof } from './ownership/proof';
+export { sealProof, openProof } from './ownership/seal';
 
 // Reports (Japanese).
 export { toPublicSummary, renderPublicSummary, renderOwnerReport, renderLocalReport, type PublicSummary } from './report';

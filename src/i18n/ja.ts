@@ -492,6 +492,7 @@ export const notRunReasonLabel: Record<NotRunReason, string> = {
   requires_deployed_site: '公開されたサイトの検査（URL 検査）で確認します',
   not_applicable: 'このプロジェクトでは、対象となる仕組み（Supabase・Firebase）の利用が見つかりませんでした',
   not_implemented: '今後対応予定です',
+  disabled_by_operator: '運営者の設定により、この検査は現在行っていません',
 };
 
 export const coverageNoteLabel: Record<CoverageNote, string> = {

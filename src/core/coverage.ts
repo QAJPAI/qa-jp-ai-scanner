@@ -19,6 +19,8 @@ export const NOT_RUN_REASONS = [
   /** The checker ran and found nothing the rule applies to (e.g. no Supabase or Firebase in the project). */
   'not_applicable',
   'not_implemented',
+  /** The operator of a service has switched this kind of check off (e.g. active checks). */
+  'disabled_by_operator',
 ] as const;
 export type NotRunReason = (typeof NOT_RUN_REASONS)[number];
 

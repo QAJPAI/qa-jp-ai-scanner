@@ -3,7 +3,7 @@
 
 /** Version of the published rule set an assessment was made against. */
 export const RULES_VERSION = '0.1.0';
-export const ENGINE_VERSION = '0.8.0';
+export const ENGINE_VERSION = '0.9.0';
 export const ASSESSMENT_SCHEMA = 'qa-jp-ai/assessment@1';
 
 export type Severity = 'P0' | 'P1' | 'P2';

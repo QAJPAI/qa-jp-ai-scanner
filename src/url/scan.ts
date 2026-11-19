@@ -32,6 +32,12 @@ export interface ScanOptions {
   now?: () => number;
   /** Override the checker set (tests, experiments). */
   checkers?: readonly Checker<UrlContext>[];
+  /**
+   * Owner tier only: false keeps active checks from running even for a
+   * verified owner (a service's off switch). The ledger then says so; it
+   * never reads as "passed".
+   */
+  activeChecks?: boolean;
 }
 
 export type ScanErrorCode = 'page_unavailable' | 'redirected_elsewhere' | 'proof_mismatch';
@@ -302,6 +308,10 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
     // Active checks run only after ownership has been verified.
     if (checker.mode === 'active' && tier !== 'owner') {
       for (const ruleId of checker.rules) deferred.push({ ruleId, reason: 'requires_owner_verification' });
+      continue;
+    }
+    if (checker.mode === 'active' && options.activeChecks === false) {
+      for (const ruleId of checker.rules) deferred.push({ ruleId, reason: 'disabled_by_operator' });
       continue;
     }
     try {
