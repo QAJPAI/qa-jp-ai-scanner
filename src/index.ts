@@ -14,6 +14,8 @@ export type { Checker, CheckOutcome } from './core/checker';
 // scanPublic() returns the summary only; scanOwner() requires a proof.
 // The lower-level scan() is not exported here: it returns every detail at either tier.
 export { scanPublic, scanOwner, normalizeTarget, ScanError, URL_CHECKERS, type ScanOptions } from './url/scan';
+export { scanErrorKind, scanErrorMessage, type ScanErrorKind } from './url/messages';
+export { closeAgents } from './url/net/fetcher';
 export type { UrlContext } from './url/context';
 
 // Entrance B: source code, before deployment.
@@ -31,3 +33,5 @@ export { ownershipSubject, type OwnershipProof } from './ownership/proof';
 export { toPublicSummary, renderPublicSummary, renderOwnerReport, renderLocalReport, type PublicSummary } from './report';
 export { renderHandoff } from './handoff';
 export { cleanText } from './text';
+// All Japanese wording, so a web front end says exactly what the reports say.
+export * as ja from './i18n/ja';

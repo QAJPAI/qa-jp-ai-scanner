@@ -37,7 +37,7 @@
 Node.js 22 以上が必要です。プロジェクトのいちばん上のフォルダーで実行します。
 
 ```
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.7.0 check .
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.8.0 check .
 ```
 
 | オプション | 内容 |

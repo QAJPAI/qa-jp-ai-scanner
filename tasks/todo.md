@@ -80,7 +80,8 @@
 - [x] Field test of the fix loop (evals/fix-loop): without the skill 12 / 12, with the skill 12 / 12
 
 ### Entrance B, next
-- [ ] Push and tag v0.7.0 (the pinned `github:QAJPAI/qa-jp-ai-scanner#v0.7.0` needs the tag to exist)
+- [ ] Push and tag v0.8.0 (the pinned `github:QAJPAI/qa-jp-ai-scanner#v0.8.0` needs the tag to exist)
+- [x] Library entry for programs that use the engine (`exports`: `dist/index.mjs` + declarations), used by url.jp.ai (v0.8.0)
 - [ ] Decide whether to publish to npm (simpler and faster install than a GitHub spec, no git needed)
 - [ ] Field test with other vendors' tools, the fallback path, and repeated runs
 - [ ] Owner answers to questions (e.g. "public read is intended"), recorded and honoured on the next check, with who and when

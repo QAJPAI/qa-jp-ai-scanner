@@ -19,7 +19,7 @@ import { inspectRepo } from './repo/scan';
 import { renderComparison } from './recheck';
 import { renderLocalReport, renderOwnerReport, renderPublicSummary } from './report';
 import { closeAgents } from './url/net/fetcher';
-import { BlockedAddressError } from './url/net/guard';
+import { scanErrorKind, scanErrorMessage } from './url/messages';
 import { normalizeTarget, ScanError, scanOwner, scanPublic } from './url/scan';
 
 const USAGE = `Usage:
@@ -234,12 +234,10 @@ async function main(): Promise<number> {
 
 /** What the requester is told. Internal detail (resolved addresses, stack traces) stays out. */
 function publicMessage(err: unknown): string {
-  if (err instanceof ScanError) return scanErrorText[err.code] ?? scanErrorText.generic!;
-  if (err instanceof BlockedAddressError) return scanErrorText.blocked!;
-  if (err instanceof Error && (err as { cause?: unknown }).cause instanceof BlockedAddressError) {
-    return scanErrorText.blocked!;
-  }
-  return err instanceof Error ? err.message : String(err);
+  // On the command line the person asking runs the tool themselves, so an
+  // unexpected error may show its own message; a web service shows the fixed text.
+  if (scanErrorKind(err) === 'generic' && err instanceof Error) return err.message;
+  return scanErrorMessage(err);
 }
 
 main()
