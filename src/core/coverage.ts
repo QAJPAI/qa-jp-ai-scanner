@@ -30,6 +30,8 @@ export const COVERAGE_NOTES = [
   /** The page's scripts and the scripts those load, as far as they are named in the code. */
   'scripts_and_their_imports',
   'presence_hint_only',
+  /** Names written in the site's code were listed for the owner; nothing behind them was requested. */
+  'names_in_code_only',
   'some_content_not_read',
   'record_limit_reached',
   'some_probes_failed',

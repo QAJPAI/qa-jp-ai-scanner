@@ -73,7 +73,7 @@ test('public tier: counts only, passive requests only, nothing identifying', asy
     const summary = toPublicSummary(assessment);
     assert.deepEqual(summary.counts, { P0: 0, P1: 1, P2: 3 }, 'no HTTPS + three missing headers');
     assert.equal(summary.grade, 'D');
-    assert.deepEqual([summary.coverage.checked, summary.coverage.partial, summary.coverage.total], [1, 2, 15]);
+    assert.deepEqual([summary.coverage.checked, summary.coverage.partial, summary.coverage.total], [1, 3, 15]);
     assert.equal('records' in summary, false);
     assert.equal('needsValidation' in summary, false);
 
@@ -83,7 +83,7 @@ test('public tier: counts only, passive requests only, nothing identifying', asy
     }
     assert.match(text, /基本設定の評価: D/);
     assert.match(text, /P1（重大）1 件 \/ P2（改善推奨）3 件/);
-    assert.match(text, /全 15 項目のうち 1 項目を検査、2 項目を一部検査/);
+    assert.match(text, /全 15 項目のうち 1 項目を検査、3 項目を一部検査/);
     assert.match(text, /重大な問題の有無と、問題の場所・修正方法は、サイトの所有者であることを確認できた方にのみ表示します/);
 
     // Details need the tier AND a valid proof for this host. Editing the tier field is not enough.
@@ -163,7 +163,9 @@ test('the public view is identical for a site with leaked keys and a site withou
     });
   const clean = await shell('console.log("hello")');
   const leaky = await shell(
-    `createClient("${SUPABASE_URL}","${serviceRole}");Stripe("${stripeLive}");const k="${openai}"`,
+    `const sb=createClient("${SUPABASE_URL}","${serviceRole}");Stripe("${stripeLive}");const k="${openai}";` +
+      // Table and bucket names in the code are owner-only knowledge too.
+      `sb.from("profiles").select();const img="${SUPABASE_URL}/storage/v1/object/public/id-cards/"+id`,
     { '/.env': { body: 'DB_PASSWORD=x\n' }, '/.git/HEAD': { body: 'ref: refs/heads/main\n' } },
   );
   try {

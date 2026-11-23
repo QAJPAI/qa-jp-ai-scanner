@@ -149,13 +149,33 @@ Known limit: a chunk whose name is put together at runtime (webpack's
 `id + "." + hash + ".js"`) is not a literal and is not read. R02 stays
 "partly examined", and the coverage note says which of the two scopes applied.
 
+#### Names the site's code gives away
+
+A site that uses Supabase from the browser writes its table and bucket names
+into its scripts. `supabaseNames()` (`src/url/supabase-names.ts`) reads them
+from the texts the check already holds: `.from("x")` and `/rest/v1/x` for
+tables, `/storage/v1/object/public/x/` and `.storage.from("x").getPublicUrl(`
+for public buckets. No JavaScript is parsed and no request is made.
+
+- `url.baas-hint` adds the table names to the R01 question, so the owner is
+  asked about tables by name.
+- `url.storage-hint` asks one R06 question per public bucket: whether what is
+  in it is meant for everyone. R06 is `partial` with the note
+  `names_in_code_only`: a public bucket is a design choice for avatars and a
+  disaster for identity documents, and only the owner knows which this is.
+
+Both stay questions. Making one a confirmed problem needs a request to the
+site's Supabase project with the key in the page, which the engine does not
+make: owner proof covers the site's domain, not that project, and the rule is
+detect, never use. Bounds: 5,000 occurrences per text, 20 names, 10 shown.
+
 The engine keeps no earlier result for a site. The service that offers the
 re-check keeps it, and decides which earlier result to compare with.
 
 #### What a site check leaves to the source code
 
-Eight of the fifteen rules cannot be answered from outside a site, and three
-more have no site inspector yet. The ledger lists them as "not examined",
+Eight of the fifteen rules cannot be answered from outside a site, and two
+more (R03, R04) have no site inspector yet. The ledger lists them as "not examined",
 which is honest and leaves the owner with nothing to do. `leftToSourceReview()`
 (`src/core/coverage.ts`) names those rules, and `renderSourceReview()`
 (`src/sourcereview.ts`) turns them into one text for the owner's AI coding
@@ -293,9 +313,10 @@ src/cli.ts       command line
   AI's report, kept apart from the assessment).
 - Combining several runs into one assessment.
 - Certificates, the public registry and revocation.
-- URL checkers for R03, R04 and R06 (the registry says this layer can answer
-  them; the case site scores them "not examined"), and chunks whose names are
-  computed at runtime for R02.
+- URL checkers for R03 and R04 (the registry says this layer can answer
+  them; the case site scores them "not examined"), a read check for R01 and
+  R06 with the owner's consent (today both are questions), and chunks whose
+  names are computed at runtime for R02.
 
 The web service (UI, login-link mail, rate limiting, audit log) is a separate
 repository, `qa-url-ai-scanner`. It holds no check logic.

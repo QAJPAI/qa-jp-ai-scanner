@@ -46,11 +46,11 @@ test('the rules a site check leaves to the source code: all that it cannot answe
   const outside = RULE_IDS.filter((id) => !RULES[id].layers.includes('url'));
   assert.equal(outside.length, 8);
   assert.deepEqual(routed.filter((u) => u.reason === 'requires_source').map((u) => u.ruleId), outside);
-  assert.deepEqual(routed.filter((u) => u.reason === 'not_implemented').map((u) => u.ruleId), ['R03', 'R04', 'R06']);
+  assert.deepEqual(routed.filter((u) => u.reason === 'not_implemented').map((u) => u.ruleId), ['R03', 'R04']);
 
   // Nothing that was examined, in full or in part, is handed over as "not examined".
   const examined = assessment.coverage.filter((u) => u.status !== 'not_run').map((u) => u.ruleId);
-  assert.deepEqual(examined, ['R01', 'R02', 'R11', 'R14']);
+  assert.deepEqual(examined, ['R01', 'R02', 'R06', 'R11', 'R14']);
   for (const id of examined) assert.equal(routed.some((u) => u.ruleId === id), false, id);
 });
 
@@ -60,7 +60,7 @@ test('the request: runs the pre-release check, then asks the AI to review each r
   const routed = sourceReviewRules(assessment);
 
   assert.match(text, /^# QA\.JP\.AI ソースコードの確認依頼（AI コーディングツールへ）/);
-  assert.match(text, /URL 検査（公開中のサイトを外部から見る検査）では、次の 11 項目を調べられませんでした/);
+  assert.match(text, /URL 検査（公開中のサイトを外部から見る検査）では、次の 10 項目を調べられませんでした/);
   assert.match(text, /開いているプロジェクトが 127\.0\.0\.1 のソースコードであることを利用者に確認/);
 
   // The command is the pre-release check of this exact version: the tool judges what it can judge.
@@ -68,7 +68,7 @@ test('the request: runs the pre-release check, then asks the AI to review each r
   assert.match(text, /コードの実行や外部への送信は行いません/);
 
   // Each rule with what to look at, in the words of the rules file.
-  assert.match(text, /## 2\. コードを読んで確認する項目（11 件）/);
+  assert.match(text, /## 2\. コードを読んで確認する項目（10 件）/);
   for (const unit of routed) {
     assert.ok(text.includes(`- ${unit.ruleId} ${ruleTitle[unit.ruleId]}`), unit.ruleId);
     assert.ok(text.includes(ruleReviewFocus[unit.ruleId]), unit.ruleId);
@@ -96,9 +96,10 @@ test('the request covers the problems of the case that the site check could not 
   const { assessment } = await caseSite();
   const text = renderSourceReview(assessment);
   const notExamined = scoreCaseSite(assessment).filter((s) => s.status === 'not_examined');
-  assert.deepEqual(notExamined.map((s) => s.problem.id), [1, 2, 5, 6]);
-  // Problems 1, 2, 5 and 6, and the rule behind the question of problem 3, each have a line to review.
-  for (const problem of CASE_PROBLEMS.filter((p) => [1, 2, 3, 5, 6].includes(p.id))) {
+  assert.deepEqual(notExamined.map((s) => s.problem.id), [1, 5, 6]);
+  // Problems 1, 5 and 6, and the rule behind the question of problem 3, each have a line to review.
+  // Problem 2 is asked about on the result itself, by the name of its bucket.
+  for (const problem of CASE_PROBLEMS.filter((p) => [1, 3, 5, 6].includes(p.id))) {
     assert.ok(text.includes(`- ${problem.rules[0]} ${ruleTitle[problem.rules[0]!]}`), `problem ${problem.id}`);
   }
 });
@@ -110,7 +111,7 @@ test('the owner report says where an unexamined rule is answered, and that a req
   assert.match(notRunReasonLabel.requires_source, /公開前チェックで、AI コーディングツールが確認する項目です/);
   // The old wording promised a tool check that does not exist.
   assert.equal(report.includes('ソースコードの検査が必要なため、今後対応予定です'), false);
-  assert.match(report, /※ 未検査の項目のうち 11 項目は、ソースコードを見れば確認できます/);
+  assert.match(report, /※ 未検査の項目のうち 10 項目は、ソースコードを見れば確認できます/);
   assert.ok(report.includes(`（\`npx --yes github:QAJPAI/qa-jp-ai-scanner#v${ENGINE_VERSION} check . --for-ai\`）`));
 });
 

@@ -11,6 +11,7 @@ import { toPublicSummary, type PublicSummary } from '../report';
 import { baasHintChecker } from './checkers/baas-hint';
 import { exposedFilesChecker } from './checkers/exposed-files';
 import { secretsChecker } from './checkers/secrets';
+import { storageHintChecker } from './checkers/storage-hint';
 import { transportChecker } from './checkers/transport';
 import type { ServedTextsRead } from './compare';
 import { everythingRead, type LoadStats, type ServedText, type UrlContext } from './context';
@@ -21,6 +22,7 @@ import { safeFetch, type FetchOptions, type FetchResult } from './net/fetcher';
 export const URL_CHECKERS: readonly Checker<UrlContext>[] = [
   secretsChecker,
   baasHintChecker,
+  storageHintChecker,
   transportChecker,
   exposedFilesChecker,
 ];

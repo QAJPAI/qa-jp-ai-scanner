@@ -206,3 +206,17 @@ rules to the pre-release check.
 - One full run of `npm test` had one failure that six further full runs did
   not reproduce (same as in 0.11.0). Not identified. Worth catching: run the
   suite with a reporter that keeps the failing test's name.
+
+### Review of 3/4 part A (2026-11-24, engine 0.12.0)
+
+- Decided with the owner: 3 and 4 split in two. A (this change) names what the
+  site's code names and asks; it makes no new request. B (a read check with
+  HEAD and count, using the key in the page) waits for a lawyer's review.
+- A: table names go into the R01 question; each bucket the code treats as
+  public gets an R06 question. Case site: 1 confirmed, 2 questions, 3 not
+  examined (was 1, 1, 4). The fixed site gains nothing.
+- Not done in A: a question for read API paths (R04). Path-shaped strings in a
+  bundle are mostly not the site's own API; asking about them would be noise.
+- Every safeguard of the name reader (single argument, name length, bucket
+  terminator, not `Array.from`, not `.storage.from` as a table, caps) was
+  removed once and a test failed each time.

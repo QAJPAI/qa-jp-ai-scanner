@@ -29,7 +29,7 @@ import type { CompareOptions } from '../core/compare';
  */
 
 /** Checkers whose records point into a served text: the page or one of its scripts. */
-const SERVED_TEXT_CHECKERS: ReadonlySet<string> = new Set(['url.secrets', 'url.baas-hint']);
+const SERVED_TEXT_CHECKERS: ReadonlySet<string> = new Set(['url.secrets', 'url.baas-hint', 'url.storage-hint']);
 
 /** What a URL check read, as returned by inspectOwner(). */
 export interface ServedTextsRead {

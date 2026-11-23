@@ -154,6 +154,15 @@ app is used. A key in a chunk that loads with the admin screen is as public as
 one in the entry script. The public check still makes only the requests of
 one page view.
 
+A site that talks to Supabase from the browser names its tables and storage
+buckets in its code. The check reads those names from the texts it already
+has and puts them in the questions it asks the owner: "the code uses the
+tables `profiles`, `messages`: is each protected by an access rule?", and one
+question per bucket the code treats as public: "are the files in `id-cards`
+meant for everyone?". It makes no request to Supabase for this and does not
+use the key in the page. Whether a table or a bucket can in fact be read is
+not tested.
+
 Most rules cannot be answered from outside a site at all. For those, and for
 the ones the site check has no inspector for yet, `renderSourceReview()`
 gives the owner one text to paste into their AI coding tool, in the project
@@ -246,6 +255,7 @@ Only check sites you own or have permission to check.
 ## Known limits
 
 - Scripts: the public check reads the scripts the HTML names. The owner check also reads the scripts those load, when the name is written out in the code (ES imports, Vite's preload lists, Next.js build manifests), up to 60 requests, five levels deep, 30 MB and half of the scan's time; what falls outside is reported as unread. A chunk whose name is put together at runtime (webpack's `id + "." + hash + ".js"`) is not seen, and a key moved into one reads as fixed on a re-check. R02 therefore stays "partly examined".
+- Tables and buckets: the check names what the code names, as questions. It does not ask Supabase anything, so a table that is open is not reported as a confirmed problem, and a name the code builds at runtime is not seen. Firebase names are not read.
 - Method A decides eligibility and issues the proof; sending the login link is the service layer's job and is not built yet. `issueEmailProofAfterLinkClick()` trusts its caller to have confirmed the click.
 - The lower-level `scan()` returns every detail at either tier. It is not exported from the package entry point; a service must use `scanPublic()` for unverified requesters.
 - `.env` files that start with more than 8 KB of comments, and source maps not referenced from a script, are not found.

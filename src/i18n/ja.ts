@@ -495,7 +495,11 @@ export const handoffComparison = {
 export const needsValidationText: Record<string, { title: string; plan: string }> = {
   'baas.supabase_rls_unverified': {
     title: 'Supabase の行レベルセキュリティ（RLS）が有効かどうか、外部からは確認できません',
-    plan: 'このサイトはブラウザーから Supabase に直接接続しています。ページに含まれる公開用キーは誰でも取得できるため、データを守っているのは RLS の設定だけです。Supabase の管理画面で、すべてのテーブルの RLS が有効になっていること、各ポリシーが「本人のデータのみ」などに限定されていることを確認してください。',
+    plan: 'このサイトはブラウザーから Supabase に直接接続しています。ページに含まれる公開用キーは誰でも取得できるため、データを守っているのは RLS の設定だけです。Supabase の管理画面で、すべてのテーブルの RLS が有効になっていること、各ポリシーが「本人のデータのみ」などに限定されていることを確認してください。「根拠」にテーブル名がある場合は、そのテーブルから確認してください（コードに名前が書かれていないテーブルも対象です）。',
+  },
+  'storage.supabase_public_bucket': {
+    title: 'ファイルを、誰でも開ける公開の置き場（公開バケット）に置いています',
+    plan: '公開バケットのファイルは、アドレスを知っていれば、ログインなしで誰でも開けます。Supabase の管理画面の Storage で、このバケットに何を置いているかを確認してください。アイコンや商品画像のように、全員に見せてよいものだけなら問題ありません。本人確認書類・契約書・診療記録などを置いている場合は、バケットを非公開（Private）に変更し、ログインした本人にだけ、期限付きの URL（signed URL）で渡すようにしてください。',
   },
   'baas.firebase_rules_unverified': {
     title: 'Firebase のセキュリティルールが適切かどうか、外部からは確認できません',
@@ -684,6 +688,8 @@ export const coverageNoteLabel: Record<CoverageNote, string> = {
   scripts_and_their_imports:
     'HTML から参照されているスクリプトと、そこから読み込まれるスクリプトが対象です。実行時に名前が組み立てられるスクリプトは対象外です',
   presence_hint_only: '利用しているサービスの検出のみで、設定内容は確認していません',
+  names_in_code_only:
+    'コードに書かれている公開バケットの名前を挙げて確認をお願いするのみで、中のファイルや設定は確認していません',
   some_content_not_read: '一部のスクリプトを読み込めなかったため、その部分は検査していません',
   record_limit_reached: '該当箇所が多すぎるため、途中で検査を打ち切りました',
   some_probes_failed: '一部の確認に応答がなかったため、その部分は判定していません',
@@ -716,6 +722,10 @@ export const evidence = {
   firebaseGrant: (path: string, ops: string) => `パス ${path} に対する ${ops || 'アクセス'} の許可`,
   directConnection: (service: string) =>
     `ブラウザーから ${service} へ直接接続する設定を検出（設定内容は確認していません）`,
+  supabaseTables: (names: string[], more: boolean) =>
+    `。コードに書かれているテーブル名: ${names.join('、')}${more ? ' ほか' : ''}`,
+  publicBucket: (bucket: string) =>
+    `コードが、Supabase のバケット「${bucket}」を公開の置き場として参照しています（中に何があるかは確認していません）`,
   redactedSecret: (prefix: string, length: number) =>
     `先頭「${prefix}」で始まる ${length} 文字の文字列（全体は記録していません）`,
   privateKeyHeader: () => 'PRIVATE KEY のヘッダー行を検出（鍵の本体は記録していません）',
