@@ -134,9 +134,10 @@ imports, Vite's preload lists, Next.js build manifests.
 
 - **Owner only.** The public check keeps to the requests of one page view.
 - **A reference is a guess until it is fetched.** An address that answers 404
-  or 410, or with something that is not JavaScript (an app that serves its page
-  for every path), is dropped and does not count as unread. Any other failure
-  counts: an unread script is not a clean script.
+  or 410, or with an HTML page (an app that serves its page for every path), is
+  dropped and does not count as unread. Any other answer is read, whatever
+  content type the server gives it, and any other failure counts: an unread
+  script is not a clean script.
 - **Same site only**, before the request and after any redirect.
 - **Bounded**: 60 requests, five levels, 30 MB of text, half of the scan's time
   budget (the rest belongs to the checks that follow), and 5,000 candidates per

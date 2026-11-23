@@ -217,18 +217,19 @@ async function httpRedirectsToHttps(host: string, options: FetchOptions): Promis
   }
 }
 
-const isJavaScript = (res: FetchResult): boolean =>
-  (res.headers['content-type'] ?? []).some((v) => /javascript|ecmascript/i.test(v));
+/** An HTML answer to a request for a script: the app's own page or a "not found" page, served for any path. */
+const isHtml = (res: FetchResult): boolean => (res.headers['content-type'] ?? []).some((v) => /html/i.test(v));
 
 /**
  * Read the scripts that the page's scripts load, and the ones those load,
  * breadth first. Appends to `scripts` and counts in `load`.
  *
  * A reference is a guess until it is fetched: a path-shaped string in a script
- * need not be a script. So an address that answers "not found", or with
- * something that is not JavaScript (an app that serves its page for every
- * path), is dropped without counting as unread. Anything else that could not
- * be read does count: an unread script is not a clean script.
+ * need not be a script. So an address that answers "not found", or with an
+ * HTML page (an app that serves its page for every path), is dropped without
+ * counting as unread. Any other answer is read as a script, whatever type the
+ * server gives it: dropping a real chunk would claim more than was read.
+ * Anything that could not be read counts: an unread script is not a clean script.
  *
  * Bounded four ways: the number of requests, the depth of the chain, the
  * amount of text kept, and a share of the scan's time budget. What falls
@@ -269,8 +270,8 @@ async function followImports(
             load.scriptsFailed++;
             continue;
           }
-          // The address may have redirected: it must still be this site, and a script.
-          if (!sameSite(new URL(res.finalUrl), pageUrl) || !isJavaScript(res)) continue;
+          // The address may have redirected: it must still be this site, and not a page.
+          if (!sameSite(new URL(res.finalUrl), pageUrl) || isHtml(res)) continue;
           if (res.finalUrl !== url) {
             if (known.has(res.finalUrl)) continue;
             known.add(res.finalUrl);

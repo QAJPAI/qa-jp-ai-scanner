@@ -195,6 +195,21 @@ test('owner: a guess that is not a script is dropped without counting as unread'
   }
 });
 
+test('owner: a chunk served with the wrong content type is still read', async () => {
+  const s = await site({
+    '/': page(['/app.js']),
+    '/app.js': script('import("./plain.js")'),
+    '/plain.js': { headers: { 'content-type': 'text/plain' }, body: withKey.body! },
+  });
+  try {
+    const { assessment, everythingRead } = await s.owner();
+    assert.equal(keys(assessment).length, 1);
+    assert.equal(everythingRead, true);
+  } finally {
+    await s.close();
+  }
+});
+
 test('owner: a chunk that could not be read is unread, and the result says so', async () => {
   const s = await site({
     '/': page(['/app.js']),
