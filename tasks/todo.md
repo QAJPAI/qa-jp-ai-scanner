@@ -107,7 +107,7 @@
 - [ ] Rate limiting per source and per domain; audit log; terms of use
 - [ ] Legal review of the verification flow and terms before any public deployment
 - [ ] R04 "existence-only" check — define the detect/exploit boundary first
-- [ ] Discover runtime-loaded chunks (build manifests) for R02
+- [x] Discover runtime-loaded chunks (build manifests) for R02 (v0.12.0, owner tier; computed names remain)
 
 ## Basics of the free check (2026-11-23, engine 0.11.0)
 
@@ -121,10 +121,12 @@ rules to the pre-release check.
 - [x] 1. Re-check of a site: `inspectOwner()`, `servedTextReader()`, site-wide "similar finding" scope
 - [x] 1. Library entry exports `renderFixRequest`, `compareAssessments`, `renderComparison`, `inspectOwner`, `servedTextReader`
 - [x] 2. Case site (`test/case-site.ts`), scoreboard test, `evals/case-site/`
-- [ ] Tag v0.11.0 after merge (the web layer pins the tag)
+- [x] Tag v0.11.0 after merge (the web layer pins the tag)
 - [ ] 3. R04/R01 existence-only read check: boundary, terms and legal review first
 - [ ] 4. R06 public storage
-- [ ] 5. R02 scripts loaded at runtime (build manifests); closes the known limit of the site re-check
+- [x] 5. R02 scripts loaded by scripts, owner tier (`src/url/imports.ts`, `followImports`), v0.12.0. Left open: names computed at runtime (webpack)
+- [x] 6. Rules a site check cannot examine are routed to the pre-release check (`leftToSourceReview`, `renderSourceReview`), v0.12.0
+- [ ] Tag v0.12.0 after merge (the web layer pins the tag)
 
 ### Review
 
@@ -189,3 +191,18 @@ rules to the pre-release check.
   - a proof for another site or an expired proof is rejected and triggers no active probe;
   - an SPA answering every path with `index.html` passes neither file verification nor R11.
 - Not verified: behaviour against real deployed sites. No third-party site was scanned.
+
+### Review of 5 and 6 (2026-11-23, engine 0.12.0)
+
+- 5: the owner check now reads the chunks the page's scripts name. Public
+  check unchanged. Every bound (owner only, same site before and after a
+  redirect, content type, 404, request cap, depth, bytes, time share,
+  candidates per script, loop) was removed once and a test failed each time.
+- 5, not done: chunk names computed at runtime. A full answer needs either a
+  headless browser or bundler-specific parsing; both are larger than this step.
+- 6: the tool still does not judge the eight source-only rules. The change is
+  that "not examined" now has a next step, and the old reason text ("planned")
+  no longer promises a tool check that does not exist.
+- One full run of `npm test` had one failure that six further full runs did
+  not reproduce (same as in 0.11.0). Not identified. Worth catching: run the
+  suite with a reporter that keeps the failing test's name.

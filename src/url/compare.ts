@@ -19,9 +19,13 @@ import type { CompareOptions } from '../core/compare';
  * Anything else is reported as "gone, but not confirmed as fixed". That errs
  * on the side of not claiming a fix.
  *
- * Known limit: a script the page loads later at runtime is not read by this
- * layer at all, so a key moved into one is not seen. The R02 coverage note
- * says so on every result.
+ * A script that another script loads is read too (see imports.ts), as long as
+ * its name is written out in the code, and counts like any other: unread, it
+ * keeps "everything was read" from being true.
+ *
+ * Known limit: a script whose name is put together at runtime is not read by
+ * this layer, so a key moved into one is not seen. The R02 coverage note says
+ * so on every result.
  */
 
 /** Checkers whose records point into a served text: the page or one of its scripts. */
@@ -29,7 +33,7 @@ const SERVED_TEXT_CHECKERS: ReadonlySet<string> = new Set(['url.secrets', 'url.b
 
 /** What a URL check read, as returned by inspectOwner(). */
 export interface ServedTextsRead {
-  /** The page and every script it references were read in full. */
+  /** The page, every script it references and every script those name were read in full. */
   everythingRead: boolean;
   /** Addresses of the texts that were read in full. */
   textsRead: ReadonlySet<string>;

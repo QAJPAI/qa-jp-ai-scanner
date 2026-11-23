@@ -1,7 +1,8 @@
 // Copyright (C) 2026 iQi
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { summarize, type Assessment, type Summary } from './core/assessment';
-import type { CoverageUnit } from './core/coverage';
+import { leftToSourceReview, type CoverageUnit } from './core/coverage';
+import { commandFor } from './invocation';
 import type { ConfirmedRecord, NeedsValidationRecord } from './core/records';
 import { SEVERITIES, type Severity } from './core/types';
 import { proofCovers, type OwnershipProof } from './ownership/proof';
@@ -158,7 +159,9 @@ export function renderOwnerReport(assessment: Assessment, proof: OwnershipProof,
   ) {
     throw new Error('Detailed report requires a valid ownership proof for this target');
   }
-  return renderDetails(assessment, ownerHeader, t.checksOwner, t.needsValidationHeading);
+  const text = renderDetails(assessment, ownerHeader, t.checksOwner, t.needsValidationHeading);
+  const routed = leftToSourceReview(assessment.coverage).length;
+  return routed > 0 ? `${text}\n\n${t.sourceReviewHint(routed, commandFor('check . --for-ai'))}` : text;
 }
 
 /**

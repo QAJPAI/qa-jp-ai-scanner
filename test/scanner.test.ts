@@ -133,7 +133,7 @@ test('owner tier: file verification unlocks details and the active checks', asyn
     assert.match(report, /修正方法:/);
     assert.match(report, /■ 確認をお願いしたい項目/);
     assert.match(report, /すべてのテーブルの RLS が有効になっていること/);
-    assert.match(report, /R05 利用者が自分の権限や認証状態を書き換えられる: 未検査（ソースコードの検査が必要なため、今後対応予定です）/);
+    assert.match(report, /R05 利用者が自分の権限や認証状態を書き換えられる: 未検査（公開中のサイトの外側からは調べられません。/);
 
     // Detect-only: full keys and file contents never reach the report or the result.
     const everything = report + JSON.stringify(assessment);

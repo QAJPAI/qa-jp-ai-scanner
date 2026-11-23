@@ -14,7 +14,8 @@ import { secretsChecker } from './checkers/secrets';
 import { transportChecker } from './checkers/transport';
 import type { ServedTextsRead } from './compare';
 import { everythingRead, type LoadStats, type ServedText, type UrlContext } from './context';
-import { safeFetch, type FetchOptions } from './net/fetcher';
+import { referencedScripts } from './imports';
+import { safeFetch, type FetchOptions, type FetchResult } from './net/fetcher';
 
 /** The URL layer's inspectors. Adding a check means adding an entry here. */
 export const URL_CHECKERS: readonly Checker<UrlContext>[] = [
@@ -29,6 +30,11 @@ export interface ScanOptions {
   proof?: OwnershipProof;
   fetch?: FetchOptions;
   maxScripts?: number;
+  /**
+   * Owner tier: how many requests may be made for scripts that the page's
+   * scripts load. 0 switches following off.
+   */
+  maxFollowedScripts?: number;
   /** Wall-clock budget for all requests of one scan. A slow target cannot hold a worker for long. */
   maxDurationMs?: number;
   now?: () => number;
@@ -59,6 +65,16 @@ export class ScanError extends Error {
 
 const SCRIPT_MAX_BYTES = 3 * 1024 * 1024;
 const DEFAULT_MAX_SCRIPTS = 20;
+/**
+ * Scripts that other scripts load (owner tier): how many requests are made
+ * for them, how deep the chain is followed, how much text is kept, and how
+ * much of the scan's time they may take. The rest of the time belongs to the
+ * checks that come after.
+ */
+const DEFAULT_MAX_FOLLOWED_SCRIPTS = 60;
+const MAX_FOLLOW_DEPTH = 5;
+const MAX_FOLLOWED_BYTES = 30 * 1024 * 1024;
+const FOLLOW_TIME_SHARE = 0.5;
 const DEFAULT_MAX_DURATION_MS = 60_000;
 const MAX_INPUT_LENGTH = 2048;
 const MAX_TAGS = 2000;
@@ -148,7 +164,7 @@ function sameSite(a: URL, b: URL): boolean {
 }
 
 /** Same-site script URLs the page itself tells every browser to load. */
-export function discoverScripts(html: string, pageUrl: URL): { urls: string[]; tagLimitHit: boolean } {
+export function discoverScripts(html: string, pageUrl: URL): { urls: string[]; tagLimitHit: boolean; base: URL } {
   const scripts = openingTags(html, 'script');
   const links = openingTags(html, 'link');
   const bases = openingTags(html, 'base');
@@ -187,7 +203,7 @@ export function discoverScripts(html: string, pageUrl: URL): { urls: string[]; t
       // malformed src: skip
     }
   }
-  return { urls: [...urls], tagLimitHit: scripts.limitHit || links.limitHit };
+  return { urls: [...urls], tagLimitHit: scripts.limitHit || links.limitHit, base };
 }
 
 export const extractScriptUrls = (html: string, pageUrl: URL): string[] => discoverScripts(html, pageUrl).urls;
@@ -201,14 +217,91 @@ async function httpRedirectsToHttps(host: string, options: FetchOptions): Promis
   }
 }
 
+const isJavaScript = (res: FetchResult): boolean =>
+  (res.headers['content-type'] ?? []).some((v) => /javascript|ecmascript/i.test(v));
+
+/**
+ * Read the scripts that the page's scripts load, and the ones those load,
+ * breadth first. Appends to `scripts` and counts in `load`.
+ *
+ * A reference is a guess until it is fetched: a path-shaped string in a script
+ * need not be a script. So an address that answers "not found", or with
+ * something that is not JavaScript (an app that serves its page for every
+ * path), is dropped without counting as unread. Anything else that could not
+ * be read does count: an unread script is not a clean script.
+ *
+ * Bounded four ways: the number of requests, the depth of the chain, the
+ * amount of text kept, and a share of the scan's time budget. What falls
+ * outside is counted as skipped.
+ */
+async function followImports(
+  scripts: ServedText[],
+  known: Set<string>,
+  pageUrl: URL,
+  pageBase: URL,
+  load: LoadStats,
+  fetchOptions: FetchOptions,
+  maxRequests: number,
+  outOfTime: () => boolean,
+): Promise<void> {
+  for (const s of scripts) known.add(s.url);
+  let requests = 0;
+  let bytes = 0;
+  let level = [...scripts];
+  for (let depth = 1; level.length > 0; depth++) {
+    const next: ServedText[] = [];
+    for (const script of level) {
+      const refs = referencedScripts(script.body, new URL(script.url), pageBase);
+      if (refs.limitHit) load.scriptsSkipped++;
+      for (const url of refs.urls) {
+        if (known.has(url)) continue;
+        known.add(url);
+        if (!sameSite(new URL(url), pageUrl)) continue;
+        if (depth > MAX_FOLLOW_DEPTH || requests >= maxRequests || bytes >= MAX_FOLLOWED_BYTES || outOfTime()) {
+          load.scriptsSkipped++;
+          continue;
+        }
+        requests++;
+        try {
+          const res = await safeFetch(url, { ...fetchOptions, maxBytes: SCRIPT_MAX_BYTES });
+          if (res.status === 404 || res.status === 410) continue;
+          if (res.status !== 200) {
+            load.scriptsFailed++;
+            continue;
+          }
+          // The address may have redirected: it must still be this site, and a script.
+          if (!sameSite(new URL(res.finalUrl), pageUrl) || !isJavaScript(res)) continue;
+          if (res.finalUrl !== url) {
+            if (known.has(res.finalUrl)) continue;
+            known.add(res.finalUrl);
+          }
+          const text: ServedText = { url: res.finalUrl, body: res.body, ...(res.truncated ? { truncated: true } : {}) };
+          scripts.push(text);
+          next.push(text);
+          bytes += res.body.length;
+          load.scriptsRead++;
+          load.scriptsFound++;
+          if (res.truncated) load.scriptsTruncated++;
+        } catch {
+          load.scriptsFailed++;
+        }
+      }
+    }
+    level = next;
+  }
+}
+
 /**
  * The requests a browser makes when opening the page, plus one request to the
- * http:// address of an https site to see whether it redirects. Nothing more.
+ * http:// address of an https site to see whether it redirects. For a verified
+ * owner, also the scripts that the page's scripts load: what a browser
+ * requests as the app is used. Nothing more.
  */
 async function loadContext(
   target: URL,
   fetchOptions: FetchOptions,
   maxScripts: number,
+  follow: { maxRequests: number; outOfTime: () => boolean },
   outOfTime: () => boolean,
   mailDns: MailDns | undefined,
 ): Promise<UrlContext> {
@@ -235,6 +328,7 @@ async function loadContext(
     scriptsFailed: 0,
     scriptsTruncated: 0,
     scriptsSkipped: Math.max(0, found.urls.length - maxScripts),
+    importsFollowed: follow.maxRequests > 0,
   };
 
   const scripts: ServedText[] = [];
@@ -255,6 +349,19 @@ async function loadContext(
     } catch {
       load.scriptsFailed++;
     }
+  }
+
+  if (follow.maxRequests > 0) {
+    await followImports(
+      scripts,
+      new Set(found.urls),
+      finalUrl,
+      found.base,
+      load,
+      fetchOptions,
+      follow.maxRequests,
+      follow.outOfTime,
+    );
   }
 
   const mailDomain = mailDomainFor(finalUrl.hostname);
@@ -314,7 +421,18 @@ async function inspect(input: string, options: ScanOptions): Promise<UrlInspecti
   // Every request of this scan, including active probes, shares one deadline.
   const fetchOptions: FetchOptions = { ...options.fetch, deadlineAt: startedMs + Math.max(budgetMs, 1) };
 
-  const ctx = await loadContext(target, fetchOptions, options.maxScripts ?? DEFAULT_MAX_SCRIPTS, outOfTime, options.mailDns);
+  const ctx = await loadContext(
+    target,
+    fetchOptions,
+    options.maxScripts ?? DEFAULT_MAX_SCRIPTS,
+    {
+      // Reading further than the page itself points is for the verified owner only.
+      maxRequests: tier === 'owner' ? (options.maxFollowedScripts ?? DEFAULT_MAX_FOLLOWED_SCRIPTS) : 0,
+      outOfTime: () => Date.now() - startedMs >= budgetMs * FOLLOW_TIME_SHARE,
+    },
+    outOfTime,
+    options.mailDns,
+  );
 
   // The proof must cover the host that was actually reached, not only the one
   // that was typed: example.jp may answer as www.example.jp.

@@ -123,12 +123,51 @@ back. A key swapped for another, or SPF added in a form that still allows
 every sender, is therefore *gone but not verified*, with the new record listed
 beside it.
 
-Known limit: scripts a page loads later at runtime are not read by this layer,
-so a key moved into one reads as fixed. The R02 coverage note says so on every
-result; closing it means reading the build manifest (see "Not built yet").
+#### Scripts that scripts load
+
+A page names its entry script; the entry names the rest. For a verified owner
+`followImports()` (`src/url/scan.ts`) reads those too, breadth first, so a key
+in a chunk that loads later is found, and a key moved into one does not read
+as fixed. `referencedScripts()` (`src/url/imports.ts`) collects path-shaped
+string literals ending in `.js` or `.mjs` without parsing JavaScript: ES
+imports, Vite's preload lists, Next.js build manifests.
+
+- **Owner only.** The public check keeps to the requests of one page view.
+- **A reference is a guess until it is fetched.** An address that answers 404
+  or 410, or with something that is not JavaScript (an app that serves its page
+  for every path), is dropped and does not count as unread. Any other failure
+  counts: an unread script is not a clean script.
+- **Same site only**, before the request and after any redirect.
+- **Bounded**: 60 requests, five levels, 30 MB of text, half of the scan's time
+  budget (the rest belongs to the checks that follow), and 5,000 candidates per
+  script. Whatever falls outside is counted as skipped, which makes the result
+  "some content not read" and keeps a re-check from calling anything fixed
+  that it cannot place.
+
+Known limit: a chunk whose name is put together at runtime (webpack's
+`id + "." + hash + ".js"`) is not a literal and is not read. R02 stays
+"partly examined", and the coverage note says which of the two scopes applied.
 
 The engine keeps no earlier result for a site. The service that offers the
 re-check keeps it, and decides which earlier result to compare with.
+
+#### What a site check leaves to the source code
+
+Eight of the fifteen rules cannot be answered from outside a site, and three
+more have no site inspector yet. The ledger lists them as "not examined",
+which is honest and leaves the owner with nothing to do. `leftToSourceReview()`
+(`src/core/coverage.ts`) names those rules, and `renderSourceReview()`
+(`src/sourcereview.ts`) turns them into one text for the owner's AI coding
+tool: confirm that the open project is this site's, run `check . --for-ai`
+of this exact version (the tool's judgement, where the tool can judge), then
+review each listed rule in the code and report it as "AI による確認".
+
+The tool does not judge these rules, and nothing here says it does: the
+ledger entry stays "not examined", the grade does not change, and the wording
+of the reason says who confirms it. The text names rules only, never a
+record, location or evidence of the site. A rule that the operator switched
+off, or that waits for owner verification, is not in it: those are answered
+by the site check itself.
 
 `test/case-site.ts` is the case site: one small service with the six problems
 QA.JP.AI was started from, and the same site after a correct fix. Its
@@ -235,6 +274,8 @@ src/handoff.ts   the same assessment as a hand-off for an AI coding tool
 src/fixrequest.ts  the fix request to paste into an AI coding tool
 src/recheck.ts   the re-check report (comparison) for people
 src/url/compare.ts  what a site check must have read before a problem counts as fixed
+src/url/imports.ts  scripts that a script loads (owner check)
+src/sourcereview.ts  the request for a source review of what a site check cannot examine
 src/baseline.ts  the saved earlier result, in the user's cache folder
 src/invocation.ts  how text written by the tool names the command to run again
 src/text.ts      cleaning of text taken from the thing being checked
@@ -252,8 +293,8 @@ src/cli.ts       command line
 - Combining several runs into one assessment.
 - Certificates, the public registry and revocation.
 - URL checkers for R03, R04 and R06 (the registry says this layer can answer
-  them; the case site scores them "not examined"), and scripts loaded at
-  runtime for R02.
+  them; the case site scores them "not examined"), and chunks whose names are
+  computed at runtime for R02.
 
 The web service (UI, login-link mail, rate limiting, audit log) is a separate
 repository, `qa-url-ai-scanner`. It holds no check logic.

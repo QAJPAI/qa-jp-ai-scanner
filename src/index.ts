@@ -48,6 +48,9 @@ export { renderHandoff } from './handoff';
 // what changed since an earlier check. Both contain locations and evidence:
 // for a site, show them only to a verified owner.
 export { renderFixRequest } from './fixrequest';
+// What a site check leaves to the source code: the request an owner hands to
+// an AI coding tool for the rules that cannot be examined from outside.
+export { renderSourceReview, sourceReviewRules } from './sourcereview';
 export {
   compareAssessments,
   ComparisonError,

@@ -22,7 +22,7 @@ A good check reports the six on the first and none of them on the second.
 | 5 | The student-only rule is enforced in the browser only | R09 |
 | 6 | The AI feature has no rate limit or spend cap | R07 |
 
-## Score today (engine 0.11.0, rules 0.2.0)
+## Score today (engine 0.12.0, rules 0.2.0)
 
 Checked as the verified owner, so with every check the free service has.
 
@@ -31,12 +31,20 @@ Checked as the verified owner, so with every check the free service has.
 | 1 | not examined | The URL layer can answer R04, but has no checker for it yet |
 | 2 | not examined | The URL layer can answer R06, but has no checker for it yet |
 | 3 | asked as a question | R05 needs the source code. The owner is asked to confirm the Supabase access rules (R01), which is where this problem lives |
-| 4 | **confirmed, P0** | The key is in a script the page references |
+| 4 | **confirmed, P0** | The key is in a script the page references. Since 0.12.0 it is also found in a script that loads later (`test/imports.test.ts`) |
 | 5 | not examined | R09 needs the source code |
 | 6 | not examined | R07 needs the source code |
 
 **1 of 6 confirmed, 1 of 6 asked as a question, 4 of 6 not examined.**
 Of the 15 rules, 4 are examined on a site (R14 and R11 in full, R02 and R01 in part).
+
+Since 0.12.0 a "not examined" line comes with a next step. The owner gets one
+text for their AI coding tool (`renderSourceReview()`): it runs the
+pre-release check on the source code, then has the AI review each rule the
+site check left out. Problems 1, 2, 5 and 6, and the rule behind problem 3
+(R05), each have a line in it (`test/sourcereview.test.ts`). The score above
+does not move for that: what an AI concludes from the code is the AI's
+judgement, not a result of this tool.
 
 On the fixed site: none of the six is reported as a problem. Problem 4 is
 "examined, nothing found". The Supabase question stays, because the site still
@@ -46,7 +54,7 @@ talks to Supabase from the browser, and that is correct.
 
 ```sh
 npm test                           # the score above is pinned by test/case-site.test.ts
-npx tsx evals/case-site/run.ts     # print what the owner sees: score, report, fix request, re-check
+npx tsx evals/case-site/run.ts     # print what the owner sees: score, report, fix request, source review request, re-check
 ```
 
 When a checker is added or changed, the score moves. Change the `TODAY` table

@@ -51,18 +51,18 @@ ownership is verified.
 ## Entrance B: source code, before deployment
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check .              # Japanese report
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --for-ai     # hand-off for an AI coding tool
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --json       # the assessment, for tools
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.12.0 check .              # Japanese report
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.12.0 check . --for-ai     # hand-off for an AI coding tool
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.12.0 check . --json       # the assessment, for tools
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.12.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
 ```
 
 ### Fix, then let the tool confirm the fix
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --fix-request  # text to paste into an AI; saves this result
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.12.0 check . --fix-request  # text to paste into an AI; saves this result
 # … the AI fixes the code …
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --compare      # what is confirmed fixed
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.12.0 check . --compare      # what is confirmed fixed
 ```
 
 `--fix-request` lists every problem, most serious first, with concrete steps
@@ -148,6 +148,19 @@ in read again, and nothing new of the same kind anywhere on the site. A key
 swapped for another key, or gone only because a script could not be read, is
 *gone but not verified*.
 
+For a verified owner the check also reads the scripts that the page's scripts
+load: the chunks a build splits an app into, which a browser requests as the
+app is used. A key in a chunk that loads with the admin screen is as public as
+one in the entry script. The public check still makes only the requests of
+one page view.
+
+Most rules cannot be answered from outside a site at all. For those, and for
+the ones the site check has no inspector for yet, `renderSourceReview()`
+gives the owner one text to paste into their AI coding tool, in the project
+of the site: it runs the pre-release check (entrance B), then has the AI
+review each remaining rule in the code, reported as the AI's own judgement
+and never as the tool's.
+
 Code and identifiers are English. Everything a user reads is Japanese
 (`src/i18n/ja.ts`).
 
@@ -232,7 +245,7 @@ Only check sites you own or have permission to check.
 
 ## Known limits
 
-- Script discovery reads the HTML only. Chunks loaded later at runtime are not seen. For the same reason, a key moved into such a chunk reads as fixed on a re-check of a site.
+- Scripts: the public check reads the scripts the HTML names. The owner check also reads the scripts those load, when the name is written out in the code (ES imports, Vite's preload lists, Next.js build manifests), up to 60 requests, five levels deep, 30 MB and half of the scan's time; what falls outside is reported as unread. A chunk whose name is put together at runtime (webpack's `id + "." + hash + ".js"`) is not seen, and a key moved into one reads as fixed on a re-check. R02 therefore stays "partly examined".
 - Method A decides eligibility and issues the proof; sending the login link is the service layer's job and is not built yet. `issueEmailProofAfterLinkClick()` trusts its caller to have confirmed the click.
 - The lower-level `scan()` returns every detail at either tier. It is not exported from the package entry point; a service must use `scanPublic()` for unverified requesters.
 - `.env` files that start with more than 8 KB of comments, and source maps not referenced from a script, are not found.

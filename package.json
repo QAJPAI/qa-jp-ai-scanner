@@ -1,6 +1,6 @@
 {
   "name": "qa-jp-ai-scanner",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "QA.JP.AI scanner for AI-built web apps: a pre-release check of your own code, and a URL check that shows details only to verified owners.",
   "type": "module",
   "main": "./dist/index.mjs",

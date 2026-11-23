@@ -28,6 +28,12 @@ export interface LoadStats {
   scriptsTruncated: number;
   /** Not requested: over the script cap, or the time budget ran out. */
   scriptsSkipped: number;
+  /**
+   * Scripts loaded by other scripts were looked for and read too (owner tier).
+   * Of those, `scriptsRead`, `scriptsFailed`, `scriptsTruncated` and
+   * `scriptsSkipped` count them like any other script.
+   */
+  importsFollowed: boolean;
 }
 
 export const everythingRead = (load: LoadStats): boolean =>
@@ -41,7 +47,7 @@ export const everythingRead = (load: LoadStats): boolean =>
 export interface UrlContext {
   page: FetchResult;
   finalUrl: URL;
-  /** Same-site scripts referenced by the page. */
+  /** Same-site scripts referenced by the page and, for a verified owner, the scripts those load. */
   scripts: ServedText[];
   /** The page HTML followed by `scripts`. */
   texts: ServedText[];
