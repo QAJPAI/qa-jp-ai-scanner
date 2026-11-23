@@ -44,12 +44,14 @@ export const secretsChecker: Checker<UrlContext> = {
       for (const record of scanTextForSecrets(text.url, text.body, make, state)) records.push(record);
       if (state.limitHit) break;
     }
-    // Never "checked": code loaded later at runtime is not seen. Say which limit applied.
+    // Never "checked": a script whose name is put together at runtime is not seen. Say which limit applied.
     const note = state.limitHit
       ? 'record_limit_reached'
-      : everythingRead(ctx.load)
-        ? 'html_referenced_scripts_only'
-        : 'some_content_not_read';
+      : !everythingRead(ctx.load)
+        ? 'some_content_not_read'
+        : ctx.load.importsFollowed
+          ? 'scripts_and_their_imports'
+          : 'html_referenced_scripts_only';
     return { records, coverage: [{ ruleId: 'R02', status: 'partial', note }] };
   },
 };

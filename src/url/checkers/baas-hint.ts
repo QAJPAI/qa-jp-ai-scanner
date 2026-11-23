@@ -4,6 +4,7 @@ import type { Checker } from '../../core/checker';
 import type { NeedsValidationRecord } from '../../core/records';
 import { evidence } from '../../i18n/ja';
 import type { ServedText, UrlContext } from '../context';
+import { supabaseNames } from '../supabase-names';
 import { JWT_PATTERN, jwtRole } from './secrets';
 
 /**
@@ -16,7 +17,12 @@ import { JWT_PATTERN, jwtRole } from './secrets';
  *
  * So this checker never confirms anything. It detects the direct connection
  * and hands the owner one precise thing to check: a needs_validation record.
+ * Where the site's code names its tables, the record names them too, so the
+ * owner knows where to look first. Still no request is made to the database.
  */
+
+/** Table names shown in one record. */
+const MAX_TABLES_SHOWN = 10;
 
 // Every quantifier here is bounded and no pattern starts with a variable-length
 // part: these run over attacker-controlled text and must stay linear.
@@ -33,6 +39,12 @@ function usesSupabase(text: string): boolean {
 }
 
 const firstMatch = (texts: ServedText[], test: (body: string) => boolean) => texts.find((t) => test(t.body));
+
+function tablesNamed(texts: ServedText[]): string {
+  const { tables, limitHit } = supabaseNames(texts);
+  if (tables.length === 0) return '';
+  return evidence.supabaseTables(tables.slice(0, MAX_TABLES_SHOWN), limitHit || tables.length > MAX_TABLES_SHOWN);
+}
 
 export const baasHintChecker: Checker<UrlContext> = {
   id: 'url.baas-hint',
@@ -51,7 +63,7 @@ export const baasHintChecker: Checker<UrlContext> = {
           blocker: 'not_observable_from_outside',
           key: 'supabase',
           location: supabase.url,
-          evidence: evidence.directConnection('Supabase'),
+          evidence: evidence.directConnection('Supabase') + tablesNamed(ctx.texts),
         }),
       );
     }

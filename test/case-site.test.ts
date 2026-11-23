@@ -36,7 +36,7 @@ async function check(variant: CaseVariant) {
  */
 const TODAY: Record<number, CaseStatus> = {
   1: 'not_examined', // R04: the URL layer can answer this, no checker yet
-  2: 'not_examined', // R06: the URL layer can answer this, no checker yet
+  2: 'question', //     R06: the code uses a bucket as public; the owner is asked what is in it (no request is made)
   3: 'question', //     R05 needs source; the Supabase access-rule question (R01) points at it
   4: 'confirmed', //    R02: the service_role key is in a script the page references
   5: 'not_examined', // R09 needs source
@@ -52,10 +52,9 @@ test('case site: the six problems, as the owner check sees them today', async ()
     TODAY,
   );
 
-  // What "not examined" means differs: two problems wait for a URL checker, three need the source.
+  // What "not examined" means differs: one problem waits for a URL checker, two need the source.
   const reasons = Object.fromEntries(scores.map((s) => [s.problem.id, s.reason]));
   assert.equal(reasons[1], 'not_implemented');
-  assert.equal(reasons[2], 'not_implemented');
   assert.equal(reasons[5], 'requires_source');
   assert.equal(reasons[6], 'requires_source');
 
@@ -73,6 +72,9 @@ test('case site: after a correct fix, none of the six is reported as a problem',
   assert.equal(scores.find((s) => s.problem.id === 4)?.status, 'clear');
   // The site still talks to Supabase from the browser, so the owner is still asked about its access rules.
   assert.equal(scores.find((s) => s.problem.id === 3)?.status, 'question');
+  // The identity documents are no longer shown from a public bucket: nothing is asked about storage.
+  assert.equal(scores.find((s) => s.problem.id === 2)?.status, 'clear');
+  assert.equal(assessment.records.some((r) => r.ruleId === 'R06'), false);
 
   // No false alarm of any kind outside basic configuration.
   const serious = assessment.records.filter((r) => r.verdict === 'confirmed' && RULES[r.ruleId].disclosure === 'owner');
@@ -83,6 +85,8 @@ test('case site: the check reads the site like a visitor and never asks for user
   const { requests } = await check('vulnerable');
   // Today no checker touches an API. When one does (R04), this is where its limits are pinned.
   assert.equal(requests.some((path) => path.startsWith('/api/')), false);
+  // Naming tables and buckets costs no request: the page, its script, and the owner-only file checks.
+  assert.equal(requests.some((path) => path.includes('/storage/') || path.includes('/rest/')), false);
 });
 
 test('case site: every problem belongs to a rule of the registry', () => {

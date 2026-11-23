@@ -91,7 +91,8 @@ test('the fix request for a site speaks about the published site, and gives no c
     assert.match(text, /修正後に利用者へ伝えること: ページからキーが見つからなくなっても/);
 
     // The owner question is passed on, not answered.
-    assert.match(text, /## 利用者に確認していただく項目（1 件）/);
+    // The access rules of the database, and the bucket the code uses as public.
+    assert.match(text, /## 利用者に確認していただく項目（2 件）/);
     assert.match(text, /外部からの検査では判定できない項目です/);
 
     // Detect-only holds here too: the key itself is never in the text.

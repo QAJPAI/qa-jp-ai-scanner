@@ -27,7 +27,11 @@ export type NotRunReason = (typeof NOT_RUN_REASONS)[number];
 /** Known limits of a check that did run. */
 export const COVERAGE_NOTES = [
   'html_referenced_scripts_only',
+  /** The page's scripts and the scripts those load, as far as they are named in the code. */
+  'scripts_and_their_imports',
   'presence_hint_only',
+  /** Names written in the site's code were listed for the owner; nothing behind them was requested. */
+  'names_in_code_only',
   'some_content_not_read',
   'record_limit_reached',
   'some_probes_failed',
@@ -63,6 +67,24 @@ export interface CoverageUnit {
    * neither changes nor reveals anything when an owner-only check runs.
    */
   passive?: ModeCoverage;
+}
+
+/**
+ * Why a rule that a site check did not examine can still be reviewed today:
+ * in the source code. Either it cannot be seen from outside at all, or the
+ * site check has no inspector for it yet.
+ */
+export const SOURCE_REVIEW_REASONS = ['requires_source', 'not_implemented'] as const satisfies readonly NotRunReason[];
+export type SourceReviewReason = (typeof SOURCE_REVIEW_REASONS)[number];
+export type SourceReviewUnit = CoverageUnit & { status: 'not_run'; reason: SourceReviewReason };
+
+/** The rules of a site check that are left to a review of the source code. Empty for any other layer. */
+export function leftToSourceReview(coverage: readonly CoverageUnit[]): SourceReviewUnit[] {
+  const reasons: readonly NotRunReason[] = SOURCE_REVIEW_REASONS;
+  return coverage.filter(
+    (u): u is SourceReviewUnit =>
+      u.layer === 'url' && u.status === 'not_run' && u.reason !== undefined && reasons.includes(u.reason),
+  );
 }
 
 /** What a checker reports about one rule it covers. A partial result must say why. */

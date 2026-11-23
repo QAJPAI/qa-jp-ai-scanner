@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
 // Check the case site as its verified owner and print what the owner would
-// see: the scoreboard of the six problems, the report, the fix request, and
-// the re-check after a correct fix.
+// see: the scoreboard of the six problems, the report, the fix request, the
+// request for a review of the source code, and the re-check after a correct fix.
 //
 //   npx tsx evals/case-site/run.ts
 import { compareAssessments } from '../../src/core/compare';
@@ -12,6 +12,7 @@ import { notRunReasonLabel } from '../../src/i18n/ja';
 import { verifyByFile } from '../../src/ownership/file';
 import { renderComparison } from '../../src/recheck';
 import { renderOwnerReport } from '../../src/report';
+import { renderSourceReview } from '../../src/sourcereview';
 import { servedTextReader } from '../../src/url/compare';
 import { closeAgents } from '../../src/url/net/fetcher';
 import { inspectOwner } from '../../src/url/scan';
@@ -51,6 +52,8 @@ try {
   console.log(renderOwnerReport(before.assessment, proof));
   heading('AI に渡す修正依頼文');
   console.log(renderFixRequest(before.assessment));
+  heading('URL から調べられない項目：AI に渡すソースコードの確認依頼文');
+  console.log(renderSourceReview(before.assessment));
 
   // The owner publishes a correct fix, then checks the same site again.
   Object.assign(routes, caseSiteRoutes('fixed'));

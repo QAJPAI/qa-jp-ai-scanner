@@ -1,7 +1,7 @@
 // Copyright (C) 2026 iQi
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { UnverifiedReason } from '../core/compare';
-import type { CoverageNote, CoverageStatus, NotRunReason } from '../core/coverage';
+import type { CoverageNote, CoverageStatus, NotRunReason, SourceReviewReason } from '../core/coverage';
 import type { Blocker } from '../core/records';
 import type { Grade, RuleId, Severity } from '../core/types';
 
@@ -495,7 +495,11 @@ export const handoffComparison = {
 export const needsValidationText: Record<string, { title: string; plan: string }> = {
   'baas.supabase_rls_unverified': {
     title: 'Supabase の行レベルセキュリティ（RLS）が有効かどうか、外部からは確認できません',
-    plan: 'このサイトはブラウザーから Supabase に直接接続しています。ページに含まれる公開用キーは誰でも取得できるため、データを守っているのは RLS の設定だけです。Supabase の管理画面で、すべてのテーブルの RLS が有効になっていること、各ポリシーが「本人のデータのみ」などに限定されていることを確認してください。',
+    plan: 'このサイトはブラウザーから Supabase に直接接続しています。ページに含まれる公開用キーは誰でも取得できるため、データを守っているのは RLS の設定だけです。Supabase の管理画面で、すべてのテーブルの RLS が有効になっていること、各ポリシーが「本人のデータのみ」などに限定されていることを確認してください。「根拠」にテーブル名がある場合は、そのテーブルから確認してください（コードに名前が書かれていないテーブルも対象です）。',
+  },
+  'storage.supabase_public_bucket': {
+    title: 'ファイルを、誰でも開ける公開の置き場（公開バケット）に置いています',
+    plan: '公開バケットのファイルは、アドレスを知っていれば、ログインなしで誰でも開けます。Supabase の管理画面の Storage で、このバケットに何を置いているかを確認してください。アイコンや商品画像のように、全員に見せてよいものだけなら問題ありません。本人確認書類・契約書・診療記録などを置いている場合は、バケットを非公開（Private）に変更し、ログインした本人にだけ、期限付きの URL（signed URL）で渡すようにしてください。',
   },
   'baas.firebase_rules_unverified': {
     title: 'Firebase のセキュリティルールが適切かどうか、外部からは確認できません',
@@ -628,6 +632,40 @@ export const handoff = {
   focus: '確認の観点',
 };
 
+/**
+ * The request an owner pastes into their AI coding tool for the rules a check
+ * of the published site cannot examine. The tool does not judge these: the AI
+ * reviews the code, and says that the judgement is its own.
+ */
+export const sourceReview = {
+  title: 'QA.JP.AI ソースコードの確認依頼（AI コーディングツールへ）',
+  intro: (count: number) =>
+    `QA.JP.AI の URL 検査（公開中のサイトを外部から見る検査）では、次の ${count} 項目を調べられませんでした。外部からは調べられない項目と、URL 検査がまだ対応していない項目です。どちらも、ソースコードを読めば確認できます。このサイトのプロジェクト（ソースコード）を開いた状態で、下の手順で確認をお願いします。`,
+  projectCheck: (host: string) =>
+    `最初に、開いているプロジェクトが ${host} のソースコードであることを利用者に確認してください。違う場合は、作業を始めずにそのことを伝えてください。`,
+  commandHeading: '## 1. 公開前チェックを実行する',
+  commandIntro:
+    'プロジェクトのフォルダーで次のコマンドを実行し、表示された内容（AI への引き継ぎ）に従ってください。プロジェクトのファイルを読むだけの検査で、コードの実行や外部への送信は行いません。キーの混入やデータベースのアクセス制御など、ツールが根拠を確認できる問題は、ここで確定します。',
+  commandFallback:
+    'コマンドを実行できない場合は、その理由を利用者に伝えたうえで、次の「2.」を進めてください。',
+  itemsHeading: (count: number) => `## 2. コードを読んで確認する項目（${count} 件）`,
+  itemsIntro:
+    '次の項目は、ツールが判定しない項目です。プロジェクトのコードを読んで確認し、項目ごとに「確認できた」「問題あり」「確認できない」のいずれかで報告してください。ツールの結果と区別するため、必ず「AI による確認」と明記してください。確認していない項目を「問題なし」と報告しないでください。',
+  reason: {
+    requires_source: '公開中のサイトの外側からは調べられない項目です',
+    not_implemented: 'URL 検査では、まだ対応していない項目です',
+  } satisfies Record<SourceReviewReason, string>,
+  rulesHeading: '## 3. 守ってほしいこと',
+  rules: [
+    '日本語で、専門用語をできるだけ避けて報告してください。',
+    '報告は「ツールが確認した問題」「ご自身で確認していただきたいこと」「AI による確認の結果」に分けてください。',
+    '「安全です」「問題ありません」と断定しないでください。言えるのは「今回確認した範囲では見つかりませんでした」までです。',
+    'キーやパスワードの値を、表示・書き写し・送信しないでください。',
+    'ファイルを修正する前に、何をどう変えるかを説明し、利用者の了承を得てください。',
+    '公開中のサイトに対して、試しにデータを取得する、書き換えるなどの操作をしないでください。確認はコードを読んで行います。',
+  ],
+};
+
 export const coverageStatusLabel: Record<CoverageStatus, string> = {
   checked: '検査済み',
   partial: '一部のみ検査',
@@ -637,7 +675,8 @@ export const coverageStatusLabel: Record<CoverageStatus, string> = {
 
 export const notRunReasonLabel: Record<NotRunReason, string> = {
   requires_owner_verification: '所有者確認後に検査します',
-  requires_source: 'ソースコードの検査が必要なため、今後対応予定です',
+  requires_source:
+    '公開中のサイトの外側からは調べられません。ソースコードを見る公開前チェックで、AI コーディングツールが確認する項目です',
   requires_deployed_site: '公開されたサイトの検査（URL 検査）で確認します',
   not_applicable: 'このプロジェクトでは、対象となる仕組み（Supabase・Firebase）の利用が見つかりませんでした',
   not_implemented: '今後対応予定です',
@@ -646,7 +685,11 @@ export const notRunReasonLabel: Record<NotRunReason, string> = {
 
 export const coverageNoteLabel: Record<CoverageNote, string> = {
   html_referenced_scripts_only: 'HTML から参照されているスクリプトのみが対象です',
+  scripts_and_their_imports:
+    'HTML から参照されているスクリプトと、そこから読み込まれるスクリプトが対象です。実行時に名前が組み立てられるスクリプトは対象外です',
   presence_hint_only: '利用しているサービスの検出のみで、設定内容は確認していません',
+  names_in_code_only:
+    'コードに書かれている公開バケットの名前を挙げて確認をお願いするのみで、中のファイルや設定は確認していません',
   some_content_not_read: '一部のスクリプトを読み込めなかったため、その部分は検査していません',
   record_limit_reached: '該当箇所が多すぎるため、途中で検査を打ち切りました',
   some_probes_failed: '一部の確認に応答がなかったため、その部分は判定していません',
@@ -679,6 +722,10 @@ export const evidence = {
   firebaseGrant: (path: string, ops: string) => `パス ${path} に対する ${ops || 'アクセス'} の許可`,
   directConnection: (service: string) =>
     `ブラウザーから ${service} へ直接接続する設定を検出（設定内容は確認していません）`,
+  supabaseTables: (names: string[], more: boolean) =>
+    `。コードに書かれているテーブル名: ${names.join('、')}${more ? ' ほか' : ''}`,
+  publicBucket: (bucket: string) =>
+    `コードが、Supabase のバケット「${bucket}」を公開の置き場として参照しています（中に何があるかは確認していません）`,
   redactedSecret: (prefix: string, length: number) =>
     `先頭「${prefix}」で始まる ${length} 文字の文字列（全体は記録していません）`,
   privateKeyHeader: () => 'PRIVATE KEY のヘッダー行を検出（鍵の本体は記録していません）',
@@ -713,7 +760,8 @@ export const report = {
   counts: '優先度別の件数',
   countUnit: '件',
   checksPublic: '実施した検査: 通常のページ表示と同等のアクセスと、DNS に公開されている情報（メールの送信ドメイン認証）の確認のみ',
-  checksOwner: '実施した検査: 通常のページ表示と同等のアクセス、DNS に公開されている情報の確認、および所有者確認後にのみ行う検査',
+  checksOwner:
+    '実施した検査: 通常のページ表示と同等のアクセス（ページのスクリプトが読み込むスクリプトを含みます）、DNS に公開されている情報の確認、および所有者確認後にのみ行う検査',
   basicGrade: '基本設定の評価',
   basicCounts: '基本設定の件数',
   seriousGated:
@@ -736,6 +784,8 @@ export const report = {
   disclaimer:
     '※ この結果は安全性を保証するものではありません。検査していない項目があります。',
   rulesVersion: '検査ルール',
+  sourceReviewHint: (count: number, command: string) =>
+    `※ 未検査の項目のうち ${count} 項目は、ソースコードを見れば確認できます。このサイトのプロジェクトを AI コーディングツールで開き、公開前チェック（\`${command}\`）を実行するよう依頼してください。AI が確認した項目は、ツールの結果とは別に「AI による確認」として報告されます。`,
   fixRequestHint:
     'AI に修正を依頼する文章は `check --fix-request` で表示できます。修正後に `check --compare` を実行すると、修正を確認できます。',
 };
