@@ -25,9 +25,12 @@ export type UnverifiedReason =
   | 'rule_not_examined'
   /** The rule was examined less fully than before (files unread, limits hit). */
   | 'coverage_reduced'
-  /** The file the problem was in was not read this time (deleted, moved, too large, a link). */
+  /**
+   * The file the problem was in was not read this time (deleted, moved, too
+   * large, a link) — or, for a site, the script it was in was not read again.
+   */
   | 'file_not_read'
-  /** A new problem or question of the same kind is now reported in the same file. */
+  /** A new problem or question of the same kind is now reported in the same file (anywhere on the site, for a URL check). */
   | 'similar_finding_present';
 
 export interface Comparison {
@@ -57,12 +60,14 @@ export class ComparisonError extends Error {
 
 export interface CompareOptions {
   /**
-   * Repo layer: was this project-relative path read in full by the current
-   * check? Paths come from the earlier result, which is untrusted, so this must
-   * be a lookup in what the check read — never a file-system access.
-   * Omit only where files do not apply.
+   * Was the place this record was found in read in full by the current check?
+   * Repo layer: a project-relative path. URL layer: the address of a served
+   * text, without the offset (see servedTextReader() in src/url/compare.ts).
+   * Places come from the earlier result, which is untrusted, so this must be a
+   * lookup in what the check read — never a file-system or network access.
+   * Omit only where it does not apply.
    */
-  wasRead?: (path: string) => boolean;
+  wasRead?: (place: string, record: AssessmentRecord) => boolean;
 }
 
 /** How fully a rule was examined. Higher is more. */
@@ -84,6 +89,10 @@ export function locationFile(location: string): string {
   return location.replace(/ \(.*\)$/, '').replace(/:\d+$/, '');
 }
 
+/** Where a record was found, without volatile detail: the file (repo) or the address without its offset (URL). */
+export const placeOf = (r: AssessmentRecord): string =>
+  r.layer === 'repo' ? locationFile(r.location) : r.location.replace(/ \(offset \d+\)$/, '');
+
 const isConfirmed = (r: AssessmentRecord): r is ConfirmedRecord => r.verdict === 'confirmed';
 const isQuestion = (r: AssessmentRecord): r is NeedsValidationRecord => r.verdict === 'needs_validation';
 
@@ -102,7 +111,11 @@ export function compareAssessments(previous: Assessment, current: Assessment, op
   // "New" is judged per verdict, so a problem turned into a question is a new question.
   const seenBefore = new Set(previous.records.map((r) => `${r.verdict}\u0000${r.fingerprint}`));
   const isNew = (r: AssessmentRecord) => r.verdict !== 'rejected' && !seenBefore.has(`${r.verdict}\u0000${r.fingerprint}`);
-  const fileOf = (r: AssessmentRecord) => (r.layer === 'repo' ? locationFile(r.location) : r.location);
+  // How far "the same place" reaches when looking for a similar new record:
+  // one file in a project, but the whole site for a URL check. Built assets
+  // are renamed on every build, so "the same script" means nothing there, and
+  // a key swapped for another one must not read as a fix wherever it lands.
+  const scopeOf = (r: AssessmentRecord) => (r.layer === 'repo' ? locationFile(r.location) : '');
 
   const toolChanged =
     previous.engineVersion !== current.engineVersion || previous.rulesVersion !== current.rulesVersion;
@@ -113,13 +126,13 @@ export function compareAssessments(previous: Assessment, current: Assessment, op
     const dNow = depth(unitNow.get(r.ruleId));
     if (dNow === 0) return 'rule_not_examined';
     if (dNow < depth(unitBefore.get(r.ruleId))) return 'coverage_reduced';
-    if (r.layer === 'repo' && options.wasRead && !options.wasRead(locationFile(r.location))) return 'file_not_read';
+    if (options.wasRead && !options.wasRead(placeOf(r), r)) return 'file_not_read';
     // Renamed, rewritten or merely made ambiguous (a confirmed problem that is now
     // only a question) is not removed: any new record of the same kind in the
     // same place keeps the old one from counting as fixed.
-    const file = fileOf(r);
+    const scope = scopeOf(r);
     const similar = current.records.some(
-      (c) => isNew(c) && c.ruleId === r.ruleId && codeFamily(c.code) === codeFamily(r.code) && fileOf(c) === file,
+      (c) => isNew(c) && c.ruleId === r.ruleId && codeFamily(c.code) === codeFamily(r.code) && scopeOf(c) === scope,
     );
     return similar ? 'similar_finding_present' : undefined;
   };

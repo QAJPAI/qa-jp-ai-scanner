@@ -10,13 +10,14 @@ import {
   findingTextFor,
   report as t,
   severityLabel,
-  unverifiedReasonLabel,
+  unverifiedReasonLabelFor,
 } from './i18n/ja';
 import { targetName } from './report';
 import { cleanText } from './text';
 
 /**
- * The re-check report for people (`qa-scan check --compare`). Built from the
+ * The re-check report for people (`qa-scan check --compare`, and a site
+ * checked again by its verified owner). Built from the
  * comparison and the current assessment only. What remains is always the
  * current check's own count, never something carried over from the earlier one.
  */
@@ -55,7 +56,7 @@ export function renderComparison(cmp: Comparison, current: Assessment): string {
 
   const lines = [
     c.title,
-    `${t.folder}: ${cleanText(targetName(current), 120)}`,
+    `${current.target.layer === 'url' ? t.target : t.folder}: ${cleanText(targetName(current), 120)}`,
     `${c.previousAt}: ${JST.format(new Date(cmp.previousAt))} / ${c.currentAt}: ${JST.format(new Date(current.startedAt))}（日本時間）`,
     c.remaining(remaining.P0, remaining.P1, remaining.P2, cmp.unverified.length),
     '',
@@ -71,7 +72,7 @@ export function renderComparison(cmp: Comparison, current: Assessment): string {
     ...section(
       c.unverifiedHeading(cmp.unverified.length),
       cmp.unverified.map((u) => u.record),
-      (r) => [`   ${c.reason}: ${unverifiedReasonLabel[reasons.get(r.fingerprint)!]}`],
+      (r) => [`   ${c.reason}: ${unverifiedReasonLabelFor(r.layer, reasons.get(r.fingerprint)!)}`],
     ),
     ...section(c.newHeading(cmp.newConfirmed.length), cmp.newConfirmed),
     c.questionsHeading,

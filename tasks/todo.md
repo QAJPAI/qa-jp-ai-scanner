@@ -90,7 +90,7 @@
 - [ ] Decide whether to publish to npm (simpler and faster install than a GitHub spec, no git needed)
 - [ ] Field test with other vendors' tools, the fallback path, and repeated runs
 - [ ] Owner answers to questions (e.g. "public read is intended"), recorded and honoured on the next check, with who and when
-- [ ] `--fix-request` for verified URL owners (the module already handles the URL layer)
+- [x] Fix request and re-check for verified URL owners (v0.11.0, see below)
 - [ ] SQL replay: a comment mentioning "row level security" marks RLS as dynamic; only string and dollar-quoted bodies should
 - [ ] R01: views without security_invoker, storage buckets marked public, security definer functions
 - [ ] R02: keys committed in the past (needs git history)
@@ -108,6 +108,38 @@
 - [ ] Legal review of the verification flow and terms before any public deployment
 - [ ] R04 "existence-only" check — define the detect/exploit boundary first
 - [ ] Discover runtime-loaded chunks (build manifests) for R02
+
+## Basics of the free check (2026-11-23, engine 0.11.0)
+
+Goal: make what a verified owner gets from url.jp.ai strong before production
+is built. Order agreed with the owner: 1 fix request and re-check for a site,
+2 the case site as a permanent ruler, then 3 login-less data read (R04/R01),
+4 public storage (R06), 5 runtime-loaded scripts (R02), 6 route source-only
+rules to the pre-release check.
+
+- [x] 1. Fix request worded for a published site (`renderFixRequest`, `urlFixSteps`, `fixRequestUrl`)
+- [x] 1. Re-check of a site: `inspectOwner()`, `servedTextReader()`, site-wide "similar finding" scope
+- [x] 1. Library entry exports `renderFixRequest`, `compareAssessments`, `renderComparison`, `inspectOwner`, `servedTextReader`
+- [x] 2. Case site (`test/case-site.ts`), scoreboard test, `evals/case-site/`
+- [ ] Tag v0.11.0 after merge (the web layer pins the tag)
+- [ ] 3. R04/R01 existence-only read check: boundary, terms and legal review first
+- [ ] 4. R06 public storage
+- [ ] 5. R02 scripts loaded at runtime (build manifests); closes the known limit of the site re-check
+
+### Review
+
+- Score on the case site is unchanged by this work, as intended: 1 of 6
+  confirmed, 1 asked as a question, 4 not examined. This change gives the
+  ruler and the fix path; items 3 to 5 move the score.
+- "Fixed" on a site was designed from the list of ways a problem can stop
+  being reported (lessons.md): tool changed, rule not examined, examined less,
+  the script unread or cut off, a key swapped for another. Each has a test,
+  and each guard was removed once to see its test fail.
+- A first design matched scripts by name with the build hash stripped. It was
+  dropped: hashes contain `-` and `_`, build ids sit in directories, and a
+  wrong match would claim a fix. Reading everything the page references is
+  both simpler and stronger; names are compared only when something is unread.
+- Not closed: a key moved into a runtime-loaded chunk reads as fixed (item 5).
 
 ## Review (2026-11-13, engine 0.7.0)
 
