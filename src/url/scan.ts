@@ -12,7 +12,8 @@ import { baasHintChecker } from './checkers/baas-hint';
 import { exposedFilesChecker } from './checkers/exposed-files';
 import { secretsChecker } from './checkers/secrets';
 import { transportChecker } from './checkers/transport';
-import type { LoadStats, ServedText, UrlContext } from './context';
+import type { ServedTextsRead } from './compare';
+import { everythingRead, type LoadStats, type ServedText, type UrlContext } from './context';
 import { safeFetch, type FetchOptions } from './net/fetcher';
 
 /** The URL layer's inspectors. Adding a check means adding an entry here. */
@@ -248,7 +249,7 @@ async function loadContext(
         load.scriptsFailed++;
         continue;
       }
-      scripts.push({ url: res.finalUrl, body: res.body });
+      scripts.push({ url: res.finalUrl, body: res.body, ...(res.truncated ? { truncated: true } : {}) });
       load.scriptsRead++;
       if (res.truncated) load.scriptsTruncated++;
     } catch {
@@ -268,7 +269,7 @@ async function loadContext(
     finalUrl,
     mailAuth,
     scripts,
-    texts: [{ url: page.finalUrl, body: page.body }, ...scripts],
+    texts: [{ url: page.finalUrl, body: page.body, ...(page.truncated ? { truncated: true } : {}) }, ...scripts],
     load,
     httpRedirectsToHttps:
       finalUrl.protocol === 'https:' && !outOfTime()
@@ -279,6 +280,11 @@ async function loadContext(
   };
 }
 
+/** A scan's result together with what it read, for comparing with an earlier check. */
+export interface UrlInspection extends ServedTextsRead {
+  assessment: Assessment;
+}
+
 /**
  * Run a scan and return the full assessment.
  *
@@ -287,6 +293,10 @@ async function loadContext(
  * is for the owner path, for tests, and for tools that post-process results.
  */
 export async function scan(input: string, options: ScanOptions = {}): Promise<Assessment> {
+  return (await inspect(input, options)).assessment;
+}
+
+async function inspect(input: string, options: ScanOptions): Promise<UrlInspection> {
   const now = options.now ?? Date.now;
   const target = normalizeTarget(input);
 
@@ -342,7 +352,7 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
     }
   }
 
-  return {
+  const assessment: Assessment = {
     schema: ASSESSMENT_SCHEMA,
     engineVersion: ENGINE_VERSION,
     rulesVersion: RULES_VERSION,
@@ -351,6 +361,11 @@ export async function scan(input: string, options: ScanOptions = {}): Promise<As
     startedAt: new Date(now()).toISOString(),
     records: dedupeByFingerprint(records),
     coverage: buildLedger('url', ran, deferred),
+  };
+  return {
+    assessment,
+    everythingRead: everythingRead(ctx.load),
+    textsRead: new Set(ctx.texts.filter((t) => !t.truncated).map((t) => t.url)),
   };
 }
 
@@ -369,4 +384,17 @@ export async function scanOwner(
   options: Omit<ScanOptions, 'proof'> = {},
 ): Promise<Assessment> {
   return scan(input, { ...options, proof });
+}
+
+/**
+ * scanOwner(), together with what was read. A service that offers a re-check
+ * keeps the earlier assessment and compares:
+ * compareAssessments(earlier, now.assessment, { wasRead: servedTextReader(now) }).
+ */
+export async function inspectOwner(
+  input: string,
+  proof: OwnershipProof,
+  options: Omit<ScanOptions, 'proof'> = {},
+): Promise<UrlInspection> {
+  return inspect(input, { ...options, proof });
 }

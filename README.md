@@ -51,18 +51,18 @@ ownership is verified.
 ## Entrance B: source code, before deployment
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check .              # Japanese report
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --for-ai     # hand-off for an AI coding tool
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --json       # the assessment, for tools
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check .              # Japanese report
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --for-ai     # hand-off for an AI coding tool
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --json       # the assessment, for tools
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --fail-on P0 # exit code 3 if a P0 is found (CI)
 ```
 
 ### Fix, then let the tool confirm the fix
 
 ```sh
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --fix-request  # text to paste into an AI; saves this result
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --fix-request  # text to paste into an AI; saves this result
 # … the AI fixes the code …
-npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.10.1 check . --compare      # what is confirmed fixed
+npx --yes github:QAJPAI/qa-jp-ai-scanner#v0.11.0 check . --compare      # what is confirmed fixed
 ```
 
 `--fix-request` lists every problem, most serious first, with concrete steps
@@ -138,8 +138,26 @@ Anyone can run a passive check on a URL and get a grade and counts. What the
 problems are, where they are, and how to fix them is shown only to someone who
 has proved they own the site.
 
+A verified owner gets the same help to fix as entrance B gives: a fix request
+to paste into an AI coding tool, and, after publishing the fix and checking
+again, what is *confirmed fixed*. The request is worded for a site (work in
+the project, not on the published files; DNS and hosting settings are the
+owner's to change; no command to run). "Fixed" keeps its meaning: the same
+tool version, the rule examined at least as fully, the place the problem was
+in read again, and nothing new of the same kind anywhere on the site. A key
+swapped for another key, or gone only because a script could not be read, is
+*gone but not verified*.
+
 Code and identifiers are English. Everything a user reads is Japanese
 (`src/i18n/ja.ts`).
+
+### The case site
+
+`test/case-site.ts` is one small service with the six problems this project
+was started from, and the same site after a correct fix. It is the ruler the
+free check is measured with: [`evals/case-site/`](evals/case-site/README.md)
+holds today's score, and a test fails when the score changes without the
+table being changed with it.
 
 ## Design rules
 
@@ -214,11 +232,11 @@ Only check sites you own or have permission to check.
 
 ## Known limits
 
-- Script discovery reads the HTML only. Chunks loaded later at runtime are not seen.
+- Script discovery reads the HTML only. Chunks loaded later at runtime are not seen. For the same reason, a key moved into such a chunk reads as fixed on a re-check of a site.
 - Method A decides eligibility and issues the proof; sending the login link is the service layer's job and is not built yet. `issueEmailProofAfterLinkClick()` trusts its caller to have confirmed the click.
 - The lower-level `scan()` returns every detail at either tier. It is not exported from the package entry point; a service must use `scanPublic()` for unverified requesters.
 - `.env` files that start with more than 8 KB of comments, and source maps not referenced from a script, are not found.
-- No web UI, rate limiting or audit log yet. These are required before any public deployment.
+- The engine has no web UI, rate limiting or audit log. Those belong to the service built on it (`qa-url-ai-scanner`) and are required before any public deployment.
 - Source-code check: it does not run git, so it cannot see keys that were committed in the past and later deleted. It replays SQL far enough to judge RLS and policies, and is not a SQL parser: views (which bypass RLS by default), storage buckets and `security definer` functions are not yet checked. The `.gitignore` matcher covers what env-file rules use in practice, not every corner of git's syntax.
 - A grade of A means nothing was found in the checks that ran. It does not mean the site is safe.
 
@@ -250,7 +268,18 @@ const summary = await scanPublic('https://example.jp'); // the public view only
 ```
 
 `scanPublic()` returns the public summary and nothing else; `scanOwner()`
-requires an ownership proof. `scanErrorMessage()` gives the fixed Japanese text
+requires an ownership proof. For a verified owner, `renderFixRequest()` gives
+the text to hand to an AI coding tool, and `inspectOwner()` with
+`compareAssessments()` and `servedTextReader()` says what a second check
+confirms as fixed:
+
+```ts
+const before = await inspectOwner(url, proof);
+// … the owner fixes and publishes …
+const now = await inspectOwner(url, proof);
+const changes = compareAssessments(before.assessment, now.assessment, { wasRead: servedTextReader(now) });
+```
+ `scanErrorMessage()` gives the fixed Japanese text
 for a check that could not run, never internal detail. `ja` holds all Japanese
 wording.
 

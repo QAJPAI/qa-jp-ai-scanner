@@ -7,6 +7,8 @@ import type { FetchOptions, FetchResult } from './net/fetcher';
 export interface ServedText {
   url: string;
   body: string;
+  /** Read only up to the size cap: the rest of it was not seen. */
+  truncated?: boolean;
 }
 
 /**

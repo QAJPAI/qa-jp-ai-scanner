@@ -84,8 +84,8 @@ otherwise *gone but not verified* with the first reason that failed:
 | same engine and rules version | `tool_changed` |
 | its rule was examined this time | `rule_not_examined` |
 | examined at least as fully as before (`checked` > `partial` > `partial` with unread files or limits) | `coverage_reduced` |
-| repo layer: the file it was in was read in full this time (a lookup in the files read, never a file-system call with a path from the earlier result) | `file_not_read` |
-| no new record of the same rule and code family (`rls.*`, `secret.*` …), of either verdict, in the same file | `similar_finding_present` |
+| the place it was in was read in full this time: the file (repo layer), or the served text (URL layer, see below). Always a lookup in what the check read, never a file-system or network call with a path from the earlier result | `file_not_read` |
+| no new record of the same rule and code family (`rls.*`, `secret.*` …), of either verdict, in the same file (repo layer) or anywhere on the site (URL layer) | `similar_finding_present` |
 
 The last condition catches renaming a variable to another public prefix and
 rewriting a confirmed problem into an undecidable one (RLS made to look dynamic)
@@ -96,6 +96,44 @@ side of not claiming a fix.
 What remains is always the current check's own records. The earlier result is
 untrusted input: it is validated, and editing it can at most invent a "fixed"
 item that never existed, never hide one that is still there.
+
+#### The same for a published site
+
+A verified owner fixes a site with an AI coding tool too, so the URL layer
+uses the same two modules. `renderFixRequest()` words the request for a site:
+the AI works in the project the site is built from, never on the published
+files; it is given no command, because it cannot check the site itself; the
+owner publishes the fix and checks the site again. Steps per problem code are
+`urlFixSteps` in `src/i18n/ja.ts`. DNS and hosting settings are named as the
+owner's to change.
+
+`inspectOwner()` returns the assessment together with what the check read, and
+`servedTextReader()` (`src/url/compare.ts`) turns that into the `wasRead` of
+the comparison. A key that was in a script is *fixed* only when the check can
+say it is not simply somewhere unread:
+
+- the page and every script it references were read in full, so the key is in
+  none of them, whatever the build calls its output now; or
+- something was left unread, and a text with the same address was read in full
+  again.
+
+Built assets are renamed on every build, so "the same file" means nothing on a
+site: a new record of the same kind anywhere on the site holds the old one
+back. A key swapped for another, or SPF added in a form that still allows
+every sender, is therefore *gone but not verified*, with the new record listed
+beside it.
+
+Known limit: scripts a page loads later at runtime are not read by this layer,
+so a key moved into one reads as fixed. The R02 coverage note says so on every
+result; closing it means reading the build manifest (see "Not built yet").
+
+The engine keeps no earlier result for a site. The service that offers the
+re-check keeps it, and decides which earlier result to compare with.
+
+`test/case-site.ts` is the case site: one small service with the six problems
+QA.JP.AI was started from, and the same site after a correct fix. Its
+scoreboard (`test/case-site.test.ts`, `evals/case-site/`) is how the free
+check is measured: a change to a checker moves a line of it, on purpose.
 
 `src/baseline.ts` keeps the earlier result in the user's cache folder, one file
 per project (named by a hash of its real path), directory 0700 and file 0600,
@@ -196,6 +234,7 @@ src/report.ts    public summary, owner report and local report, derived from an 
 src/handoff.ts   the same assessment as a hand-off for an AI coding tool
 src/fixrequest.ts  the fix request to paste into an AI coding tool
 src/recheck.ts   the re-check report (comparison) for people
+src/url/compare.ts  what a site check must have read before a problem counts as fixed
 src/baseline.ts  the saved earlier result, in the user's cache folder
 src/invocation.ts  how text written by the tool names the command to run again
 src/text.ts      cleaning of text taken from the thing being checked
@@ -212,4 +251,9 @@ src/cli.ts       command line
   AI's report, kept apart from the assessment).
 - Combining several runs into one assessment.
 - Certificates, the public registry and revocation.
-- The web service: UI, login-link mail, rate limiting, audit log.
+- URL checkers for R03, R04 and R06 (the registry says this layer can answer
+  them; the case site scores them "not examined"), and scripts loaded at
+  runtime for R02.
+
+The web service (UI, login-link mail, rate limiting, audit log) is a separate
+repository, `qa-url-ai-scanner`. It holds no check logic.

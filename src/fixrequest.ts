@@ -7,7 +7,8 @@ import {
   afterFixNoteFor,
   blockerLabel,
   findingTextFor,
-  fixRequest as f,
+  fixRequest,
+  fixRequestUrl,
   fixStepsFor,
   handoff as h,
   needsValidationText,
@@ -19,14 +20,23 @@ import { targetName } from './report';
 import { cleanText } from './text';
 
 /**
- * The fix request (`qa-scan check --fix-request`): one text the owner pastes
- * into their AI coding tool. Every confirmed problem, most serious first, with
- * concrete steps, the conditions the AI must keep, and the command that
- * re-checks the result — so "fixed" is decided by the tool, not by the AI.
+ * The fix request: one text the owner pastes into their AI coding tool. Every
+ * confirmed problem, most serious first, with concrete steps, the conditions
+ * the AI must keep, and how the result is re-checked — so "fixed" is decided
+ * by the tool, not by the AI.
+ *
+ * For a project (`qa-scan check --fix-request`) the AI runs the re-check
+ * command itself. For a published site there is no such command: the owner
+ * publishes the fix and checks the site again, so the text says that instead.
  *
  * Owner questions are listed for the AI to ask, never to answer.
+ *
+ * It contains locations and evidence. For a site, show it only to a verified
+ * owner — the same rule as the detailed report.
  */
 export function renderFixRequest(assessment: Assessment): string {
+  const site = assessment.target.layer === 'url';
+  const f = site ? { ...fixRequest, ...fixRequestUrl } : fixRequest;
   const confirmed = assessment.records
     .filter((r): r is ConfirmedRecord => r.verdict === 'confirmed')
     .sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity));
@@ -81,6 +91,7 @@ export function renderFixRequest(assessment: Assessment): string {
     lines.push('');
   }
 
-  lines.push(f.recheckHeading, '', f.recheckIntro, '', '```', RECHECK_COMMAND, '```', '');
+  lines.push(f.recheckHeading, '', f.recheckIntro, '');
+  if (!site) lines.push('```', RECHECK_COMMAND, '```', '');
   return lines.join('\n');
 }

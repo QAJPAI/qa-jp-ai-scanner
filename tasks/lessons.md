@@ -68,3 +68,11 @@ again.
 ## DMARC p=reject reaches subdomains (2026-11-20)
 - I told the user to set `p=reject` on jp.ai because "jp.ai sends no mail". His main mailbox is on email.jp.ai; p=reject is inherited by subdomains (sp defaults to p), and his outgoing mail was rejected.
 - Rule: before advising any DNS change that can stop mail, ask which domains AND subdomains send mail. Default to `p=none` first, or `sp=none` when subdomains are in use. Changes that can break someone's mail are not "a few minutes, done".
+
+## A plan in a document is not a deployment (2026-11-23)
+- I wrote that url.jp.ai was in trial operation because the roadmap and README spoke of it that way. I had not been able to open the site. The owner corrected it: production is not built yet.
+- Rule: say "live" only after seeing it answer. Otherwise write "implemented, deployment not confirmed", and ask.
+
+## Do not identify built files by name (2026-11-23)
+- For the re-check of a site, the first design matched a script across builds by stripping its content hash. Hashes contain `-` and `_`, build ids sit in directories, and a wrong match would have claimed a fix.
+- Rule: when a guard depends on guessing a naming scheme, look for the condition that needs no guess (here: everything the page references was read in full). Compare names only as the fallback, and only exactly.
